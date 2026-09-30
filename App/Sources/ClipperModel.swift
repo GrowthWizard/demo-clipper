@@ -26,6 +26,10 @@ final class ClipperModel {
     private(set) var phase = Phase.idle
     var selectionOptions = SelectionOptions()
     var selectionProblem: Problem?
+    var requestyCredentials = RequestyCredentials.from(environment: ProcessInfo.processInfo.environment)
+    var remembersRequestyAccess = false
+    var requestyAccessProblem: String?
+    private var hasStoredRequestyAccess = false
     private(set) var activeProvider = SelectionOptions.Provider.local
     private(set) var picks: [Pick] = []
     private(set) var sentences: [Sentence] = []
@@ -79,6 +83,46 @@ final class ClipperModel {
     /// A cancelled run keeps going until its next suspension point, so each
     /// run reports only while its number is still the current one.
     private var run = 0
+
+    init() {
+        // An optional process configuration seeds only this session. A normal
+        // Finder launch uses the API field or this app's own Keychain item.
+        guard requestyCredentials.apiKey.isEmpty else { return }
+        do {
+            if let saved = try RequestyKeychain().load() {
+                requestyCredentials = saved
+                remembersRequestyAccess = true
+                hasStoredRequestyAccess = true
+            }
+        } catch {
+            requestyAccessProblem = RequestyKeychain.Failure.read.errorDescription
+        }
+    }
+
+    var requestyConfiguration: RequestyConfiguration? {
+        try? requestyCredentials.configuration()
+    }
+
+    /// Saves only after an explicit settings action. Session-only access never
+    /// puts the API key in UserDefaults, a file or a launch argument.
+    func saveRequestyAccess() -> Bool {
+        requestyAccessProblem = nil
+        do {
+            if remembersRequestyAccess {
+                _ = try requestyCredentials.configuration()
+                try RequestyKeychain().save(requestyCredentials)
+                hasStoredRequestyAccess = true
+            } else if hasStoredRequestyAccess {
+                try RequestyKeychain().remove()
+                hasStoredRequestyAccess = false
+            }
+            return true
+        } catch {
+            requestyAccessProblem = (error as? RequestyKeychain.Failure)?.errorDescription
+                ?? "Complete the Requesty API key, router and GLM 5.3 Flash model before saving access."
+            return false
+        }
+    }
 
     /// The selection when it is a clip that can be cut. The recording is not:
     /// it is already the file on disk.
@@ -367,8 +411,7 @@ extension ClipperModel {
         do {
             let selector: ClipSelection
             if options.provider == .requesty {
-                let override = options.model.trimmingCharacters(in: .whitespacesAndNewlines)
-                selector = .requesty(try RequestyConfiguration(model: override.isEmpty ? nil : override), options)
+                selector = .requesty(try requestyCredentials.configuration(), options)
             } else {
                 phase = .preparingModels
                 try await finder.prepare()

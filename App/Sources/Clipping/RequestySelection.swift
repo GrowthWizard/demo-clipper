@@ -11,7 +11,7 @@ enum RequestySelectionError: LocalizedError {
         case .invalidTranscript: "The transcript has invalid sentence IDs or timings."
         case .invalidSelection: "Requesty returned invalid, overlapping or overlong clips. Try selecting again or adjust the instructions."
         case .noClips: "The model found no suitable clips. Try another focus or model."
-        case .configuration: "Requesty needs REQUESTY_API_KEY, REQUESTY_BASE_URL and an OpenAI REQUESTY_MODEL from the project's 1Password environment."
+        case .configuration: "Enter a Requesty API key, a supported HTTPS Requesty router and an allowed GLM 5.3 Flash model in Clip Selection."
         case .refused: "The model declined this selection request."
         case .incomplete: "The model did not finish its selection. Try again with fewer clips."
         case .service(let status): "Requesty could not complete the request (HTTP \(status)). Check the key, model access and account limits."

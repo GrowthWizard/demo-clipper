@@ -3,7 +3,7 @@ import Foundation
 struct SelectionOptions: Sendable, Equatable {
     enum Provider: String, CaseIterable, Identifiable, Sendable {
         case local = "On this Mac"
-        case requesty = "OpenAI via Requesty"
+        case requesty = "GLM 5.3 Flash via Requesty"
         var id: String { rawValue }
     }
     enum Focus: String, CaseIterable, Identifiable, Sendable {
@@ -26,7 +26,7 @@ struct SelectionOptions: Sendable, Equatable {
     var maximumDuration = 60.0
     var focus = Focus.balanced
     var instructions = ""
-    // A temporary choice for this app session. The durable default is in 1Password.
+    // Optional CLI override; the GUI uses its API fields and Keychain settings.
     var model = ""
 
     func validate() throws {

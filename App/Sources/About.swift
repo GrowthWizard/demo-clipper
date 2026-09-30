@@ -14,7 +14,7 @@ enum About {
     /// the plain form.
     static let footer =
         "Powered by Voz, Clips and Title, on-device models from Desert Ant Labs. "
-        + "Optional OpenAI clip selection through Requesty sends the transcript. Video and audio stay on this Mac."
+        + "Optional GLM 5.3 Flash clip selection through Requesty sends the transcript. Video and audio stay on this Mac."
 }
 
 // SwiftUI has no standard About panel, so this is a window of its own.

@@ -1,17 +1,18 @@
 # Clipper Requesty
 
 A fork of [Desert Ant Labs' Clipper](https://github.com/Desert-Ant-Labs/demo-clipper)
-with optional **OpenAI clip selection through Requesty**. Voz still transcribes
+with optional **GLM 5.3 Flash clip selection through Requesty**. Voz still transcribes
 locally; the existing Title model, sentence editing, preview, subtitles and
 AVFoundation export stay local. The original Clips selector remains available.
 
 Choose **Clip Selection** in the toolbar. Requesty mode offers clip count,
-maximum duration (10–60 seconds), focus, editorial instructions and a temporary
-OpenAI model override. **Select Again** reuses the existing transcript and
+maximum duration (10–60 seconds), focus, editorial instructions and a
+GLM 5.3 Flash model choice. The same window has a masked **Requesty API key** field
+and a router field. **Select Again** reuses the existing transcript and
 replaces clips only after a successful selection. A failed request keeps the
 previous clips. Selection can be cancelled.
 
-OpenAI returns ranked, contiguous sentence-ID ranges, never generated timecodes.
+GLM 5.3 Flash returns ranked, contiguous sentence-ID ranges, never generated timecodes.
 The app rejects missing/reversed IDs, overlaps, malformed responses and clips
 whose actual SDK cut duration, including padding, exceeds the requested maximum
 or 60 seconds. Manual additions and export keep Requesty clips within 60 seconds.
@@ -19,11 +20,13 @@ The inspector shows their rank without inventing a local Clips confidence score.
 The selection is editorial advice: check the transcript and preview before posting.
 
 Only the transcript and editorial preferences leave the Mac in Requesty mode.
-The client uses the Responses API with a strict JSON schema, `store: false`,
+The client uses the Chat Completions API with a strict JSON schema, `store: false`,
 an ephemeral session, no redirects and sanitized errors. Requesty/provider
 logging and retention depend on the account settings; `store: false` alone does
 not disable gateway logging. The EU router controls Requesty processing;
 provider inference residency depends on the selected model.
+The request uses `reasoning_effort: "none"` to leave the bounded output budget
+available for sentence IDs. Incomplete output is rejected rather than cut.
 See [Requesty data privacy](https://docs.requesty.ai/features/data-privacy) and
 [EU routing](https://docs.requesty.ai/features/eu-routing).
 
@@ -36,7 +39,7 @@ Toolchain, use `xcodebuild -downloadComponent MetalToolchain`.
 ```bash
 git clone https://github.com/GrowthWizard/demo-clipper.git
 cd demo-clipper
-./script/build_and_run.sh run-local  # original on-device selection
+./script/build_and_run.sh run
 ./script/build_and_run.sh test
 ```
 
@@ -47,7 +50,26 @@ The build scripts avoid an observed Xcode 26.6 command-line probe stall by
 omitting verbose diagnostics from the Clang macro probe. Compilation flags and
 macro output are unchanged.
 
-### Requesty through 1Password
+### Requesty in the app
+
+Open **Clip Selection**, choose **GLM 5.3 Flash via Requesty**, and enter your Requesty
+API key. Choose a model available to your key (for example `glm-5.3-flash@eu`). The
+default router is `https://router.eu.requesty.ai/v1`. The default model ID
+`glm-5.3-flash@eu` routes through EU providers. This version accepts only
+GLM 5.3 Flash, including its named provider deployments; the key must permit
+the exact chosen ID. Catalog visibility alone does not prove model access.
+
+Enable **Remember access in macOS Keychain** to save the key, router and model
+in this app's encrypted login Keychain item. This item does not sync to iCloud.
+Without that option, the values stay in memory until you quit. Disabling it
+and clicking **Done** removes this app's saved item. Keys are never saved in
+preferences, project files or logs.
+
+The app works when opened through Finder or the Codex Run action. No 1Password
+mount is required. A failed Keychain save keeps the settings window open with
+an error; you can choose session-only access instead.
+
+### Optional process configuration and CLI
 
 Use the `1password-project-env` skill and the official local 1Password MCP.
 Create or reuse a dedicated Clipper/local environment, save these variables,
@@ -59,26 +81,28 @@ is gitignored and contains metadata only.
 |---|---|---|
 | `REQUESTY_API_KEY` | Yes | Concealed Requesty key with access to the chosen model |
 | `REQUESTY_BASE_URL` | Yes | `https://router.eu.requesty.ai/v1` or another supported Requesty router |
-| `REQUESTY_MODEL` | Yes | OpenAI model ID, e.g. `openai/gpt-5`, with Structured Outputs support |
+| `REQUESTY_MODEL` | Yes | GLM 5.3 Flash model ID, e.g. `glm-5.3-flash@eu`, with Structured Outputs support |
 
-Mount the environment as the skill's FIFO outside the checkout. Do not create
-plain-text `.env` copies or store the key in the app's preferences. Then run:
+For a managed environment launch, mount the environment as the skill's FIFO
+outside the checkout. Do not create plain-text `.env` copies. Then run:
 
 ```bash
-./script/build_and_run.sh run
+./script/build_and_run.sh run-1password
 ```
 
-This launcher injects the values with the skill runner and passes them in memory to LaunchServices to open the native app bundle. Opening the app through Finder does not inherit
-those process values and leaves Requesty unavailable. Restart the app after
-changing 1Password values. The Codex Run action uses the same launcher.
-1Password currently allows ten local mounts per device; free a specifically
-chosen unused mount if that limit is reached.
+This optional launcher injects the values with the skill runner and passes them
+in memory to LaunchServices. They seed the app's API fields for that session;
+click **Done** with Keychain storage enabled to remember them. Restart an
+environment-launched app after changing its process values.
 
 For the CLI, build with `./script/build_and_run.sh cli` and launch through the
 same skill runner. Add `--requesty --count 5 --max-duration 60 --focus context`
-(or `hook` / `balanced`), optionally `--model openai/...` and `--instructions`.
+(or `hook` / `balanced`), optionally `--model glm-5.3-flash@eu` and `--instructions`.
 The CLI defaults to the original local selector; no automatic remote/local fallback
 runs after a Requesty error.
+
+The CLI reads `REQUESTY_API_KEY`, `REQUESTY_BASE_URL` and `REQUESTY_MODEL` from
+its process environment. The GUI's Keychain item is not read by the CLI.
 
 ## Original Clipper documentation
 

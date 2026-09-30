@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 
 /// CLI launcher: LaunchServices needs explicit environment values. The key
-/// arrives from the 1Password runner, stays in memory and never enters argv.
+/// arrives from the parent process, stays in memory and never enters argv.
 @main
 struct LaunchWithEnvironment {
     enum Failure: Error { case launch }

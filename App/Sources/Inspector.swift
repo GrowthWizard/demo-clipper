@@ -91,7 +91,7 @@ private struct ClipRows: View {
             LabeledContent("Percentile", value: String(format: "%.2f", pick.clip.percentile))
             LabeledContent("Score", value: String(format: "%.3f", pick.clip.score))
         } else {
-            LabeledContent("Selector", value: "OpenAI via Requesty")
+            LabeledContent("Selector", value: "GLM 5.3 Flash via Requesty")
         }
     }
 

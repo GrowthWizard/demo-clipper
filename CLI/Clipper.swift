@@ -8,7 +8,7 @@ import Transcript
 struct Clipper: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "clipper",
-        abstract: "Find short clips locally or select them with OpenAI via Requesty."
+        abstract: "Find short clips locally or select them with GLM 5.3 Flash via Requesty."
     )
 
     @Argument(help: "The video to clip. Omit it with --from-transcript.", completion: .file())
@@ -20,7 +20,7 @@ struct Clipper: AsyncParsableCommand {
     @Option(name: [.short, .customLong("count")], help: "How many clips to keep.")
     var count: Int?
 
-    @Flag(name: .long, help: "Select with OpenAI through Requesty; send only the transcript.")
+    @Flag(name: .long, help: "Select with GLM 5.3 Flash through Requesty; send only the transcript.")
     var requesty = false
 
     @Option(name: .long, help: "Maximum Requesty clip duration, 10–60 seconds including cut padding.")
@@ -29,7 +29,7 @@ struct Clipper: AsyncParsableCommand {
     @Option(name: .long, help: "Requesty focus: balanced, context or hook.")
     var focus = "balanced"
 
-    @Option(name: .long, help: "OpenAI model ID for this run; defaults to REQUESTY_MODEL from 1Password.")
+    @Option(name: .long, help: "GLM 5.3 Flash model ID for this run; defaults to REQUESTY_MODEL in the process environment.")
     var model: String?
 
     @Option(name: .long, help: "Additional editorial preferences for Requesty selection.")
@@ -159,7 +159,7 @@ extension Clipper {
         let selector: ClipSelection
         if requesty {
             selector = .requesty(try RequestyConfiguration(model: model), selectionOptions)
-            Progress.log("Selecting with OpenAI via Requesty; titles stay local")
+            Progress.log("Selecting with GLM 5.3 Flash via Requesty; titles stay local")
         } else {
             selector = .local(count: count)
             Progress.log("Loading Clips" + (finder.writesTitles ? " and the card model" : ""))
@@ -263,7 +263,7 @@ extension Clipper {
             if let card = pick.card { print("   \(card.description)") }
             let ids = pick.keptSentenceIDs.map(String.init).joined(separator: ",")
             if pick.provider == .requesty {
-                print("   sentences: \(ids), selected with OpenAI via Requesty")
+                print("   sentences: \(ids), selected with GLM 5.3 Flash via Requesty")
             } else {
                 print(String(format: "   sentences: %@, score %.3f, percentile %.2f",
                              ids, pick.clip.score, pick.clip.percentile))

@@ -4,7 +4,7 @@ struct SelectionOptionsView: View {
     @Bindable var model: ClipperModel
     @Environment(\.dismiss) private var dismiss
 
-    private var configuration: RequestyConfiguration? { try? RequestyConfiguration() }
+    private var configuration: RequestyConfiguration? { model.requestyConfiguration }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -19,11 +19,29 @@ struct SelectionOptionsView: View {
                         Text("Use the original Clips model. Transcription, selection and titles run on this Mac.")
                             .foregroundStyle(.secondary)
                     } else {
-                        Text("Only the transcript and your preferences are sent through Requesty to OpenAI. Voz, titles, video preview and export stay on this Mac.")
+                        Text("Only the transcript and your preferences are sent through Requesty to GLM 5.3 Flash. Voz, titles, video preview and export stay on this Mac.")
                             .foregroundStyle(.secondary)
                     }
                 }
                 if model.selectionOptions.provider == .requesty {
+                    Section("Requesty access") {
+                        SecureField("Requesty API key", text: $model.requestyCredentials.apiKey)
+                            .accessibilityLabel("Requesty API key")
+                        TextField("GLM 5.3 Flash model", text: $model.requestyCredentials.model)
+                        TextField("Requesty router", text: $model.requestyCredentials.baseURL)
+                        Toggle("Remember access in macOS Keychain", isOn: $model.remembersRequestyAccess)
+                        Text(model.remembersRequestyAccess
+                             ? "The key, model and router are saved in this app's encrypted login Keychain item on this Mac."
+                             : "The key stays in memory until you quit the app. No 1Password mount is needed.")
+                            .font(.callout).foregroundStyle(.secondary)
+                        if let problem = model.requestyAccessProblem {
+                            Text(problem).font(.callout).foregroundStyle(.red)
+                        }
+                        if configuration == nil {
+                            Text("Enter your Requesty key and an allowed GLM 5.3 Flash ID. The default glm-5.3-flash@eu uses EU providers.")
+                                .font(.callout).foregroundStyle(.secondary)
+                        }
+                    }
                     Section("Short clips") {
                         Stepper("Up to \(model.selectionOptions.count) clips", value: $model.selectionOptions.count, in: 1...10)
                         LabeledContent("Maximum length", value: "\(Int(model.selectionOptions.maximumDuration)) seconds")
@@ -39,18 +57,6 @@ struct SelectionOptionsView: View {
                         TextField("Additional instructions", text: $model.selectionOptions.instructions, axis: .vertical)
                             .lineLimit(3...6)
                     }
-                    Section("OpenAI model") {
-                        TextField("Model for this session", text: $model.selectionOptions.model,
-                                  prompt: Text(configuration?.model ?? "Use the 1Password default"))
-                        Text("Leave empty to use REQUESTY_MODEL from 1Password. Enter an OpenAI model ID available to your Requesty key, such as openai/gpt-5.")
-                            .font(.callout).foregroundStyle(.secondary)
-                        if let configuration {
-                            LabeledContent("Requesty", value: configuration.baseURL.host ?? "")
-                        } else {
-                            Label("Start the app through the project's 1Password launcher to enable Requesty.", systemImage: "key")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
                 }
                 if !model.sentences.isEmpty {
                     Section {
@@ -63,10 +69,13 @@ struct SelectionOptionsView: View {
             .disabled(!canEdit)
             HStack {
                 Spacer()
-                Button("Done") { dismiss() }
+                Button("Done") {
+                    if model.selectionOptions.provider == .local || model.saveRequestyAccess() { dismiss() }
+                }
                     .keyboardShortcut(.cancelAction)
                 if !model.sentences.isEmpty {
                     Button("Select Again") {
+                        guard model.selectionOptions.provider == .local || model.saveRequestyAccess() else { return }
                         model.selectAgain()
                         dismiss()
                     }
@@ -77,7 +86,7 @@ struct SelectionOptionsView: View {
             }
             .padding()
         }
-        .frame(width: 540, height: model.selectionOptions.provider == .requesty ? 650 : 340)
+        .frame(width: 560, height: model.selectionOptions.provider == .requesty ? 760 : 340)
     }
 
     private var canEdit: Bool {

@@ -61,7 +61,7 @@ echo "📦 build/Build/Products/Release/Clipper Requesty.app"
 """
 
 [tasks.run]
-description = 'Build and open the app through 1Password'
+description = 'Build and open the app; configure Requesty in Clip Selection'
 run = './script/build_and_run.sh run'
 
 [tasks.cli]

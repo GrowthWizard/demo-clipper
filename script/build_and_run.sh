@@ -19,10 +19,10 @@ build_target() {
 }
 
 launch_requesty() {
-    # Pass the runner's values to LaunchServices in memory, never as shell args.
+    # Optional process configuration goes to LaunchServices in memory.
     # The GUI launches as a native app bundle with normal Dock activation.
     [ -d "$CLIPPER_APP" ] || { echo 'Build the app first.'; return 1; }
-    [ -n "${REQUESTY_API_KEY:-}" ] || { echo 'Requesty is not configured in 1Password.'; return 1; }
+    [ -n "${REQUESTY_API_KEY:-}" ] || { echo 'Set REQUESTY_API_KEY for this optional environment launch.'; return 1; }
     if [ -f build/app.pid ]; then
         CLIPPER_OLD_PID=$(cat build/app.pid)
         if [[ "$CLIPPER_OLD_PID" =~ ^[0-9]+$ ]] && \
@@ -43,17 +43,17 @@ case "$CLIPPER_MODE" in
 build) build_target Clipper Release build ;;
 cli) build_target ClipperCLI Release build ;;
 test) build_target ClipperTests Debug test ;;
-run-local)
+run|run-local)
     build_target Clipper Release build
     /usr/bin/open -n "$CLIPPER_APP"
     ;;
 launch-requesty) launch_requesty ;;
-run)
+run-1password)
     build_target Clipper Release build
     CLIPPER_ENV_RUNNER="${CLIPPER_ENV_RUNNER:-$HOME/.agents/skills/1password-project-env/scripts/env.mjs}"
     [ -f "$CLIPPER_ENV_RUNNER" ] || { echo 'Install the 1password-project-env skill first.'; exit 1; }
     exec node "$CLIPPER_ENV_RUNNER" run --config "$CLIPPER_ROOT/.1password/project.json" \
         --project "$CLIPPER_ROOT" -- "$CLIPPER_ROOT/script/build_and_run.sh" launch-requesty
     ;;
-*) echo 'Usage: script/build_and_run.sh build|cli|test|run|run-local'; exit 2 ;;
+*) echo 'Usage: script/build_and_run.sh build|cli|test|run|run-local|run-1password'; exit 2 ;;
 esac

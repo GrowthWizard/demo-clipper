@@ -9,17 +9,23 @@ struct RequestyConfiguration: Sendable {
 
     init(environment: [String: String] = ProcessInfo.processInfo.environment,
          model: String? = nil) throws {
-        let key = environment["REQUESTY_API_KEY"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let selectedModel = (model ?? environment["REQUESTY_MODEL"] ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        try self.init(apiKey: environment["REQUESTY_API_KEY"] ?? "",
+                      baseURL: environment["REQUESTY_BASE_URL"] ?? "",
+                      model: model ?? environment["REQUESTY_MODEL"] ?? "")
+    }
+
+    init(apiKey: String, baseURL: String, model: String) throws {
+        let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let selectedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty, !key.contains(where: { $0.isNewline }),
-              let rawURL = environment["REQUESTY_BASE_URL"],
-              let url = URL(string: rawURL), url.scheme == "https",
+              let url = URL(string: baseURL.trimmingCharacters(in: .whitespacesAndNewlines)), url.scheme == "https",
               ["router.requesty.ai", "router.eu.requesty.ai", "router.us.requesty.ai", "router.ap.requesty.ai"].contains(url.host ?? ""),
               url.port == nil, url.user == nil, url.password == nil,
               url.query == nil, url.fragment == nil,
               ["/v1", "/v1/"].contains(url.path),
-              selectedModel.hasPrefix("openai/"), selectedModel.count > 7,
+              selectedModel == "glm-5.3-flash@eu" || selectedModel == "glm-5.3-flash"
+                  || ["runware", "tencent", "fireworks", "deepinfra", "zai", "tensorx", "sference", "novita", "lyceum"]
+                      .contains(where: { selectedModel == "\($0)/glm-5.3-flash" }),
               selectedModel.count <= 200,
               selectedModel.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || "-/._:@".contains($0)) })
         else { throw RequestySelectionError.configuration }
@@ -90,12 +96,16 @@ struct RequestySelector: Sendable {
             "properties": ["clips": ["type": "array", "items": range]], "required": ["clips"],
         ]
         let body: [String: Any] = [
-            "model": configuration.model, "store": false, "max_output_tokens": 8_192,
-            "instructions": Self.instructions,
-            "input": String(decoding: input, as: UTF8.self),
-            "text": ["format": ["type": "json_schema", "name": "clip_selection", "strict": true, "schema": schema]],
+            "model": configuration.model, "store": false, "max_tokens": 8_192,
+            // GLM's default thinking can consume the entire output budget on
+            // a long transcript before emitting the small sentence-ID object.
+            "reasoning_effort": "none",
+            "messages": [["role": "system", "content": Self.instructions],
+                         ["role": "user", "content": String(decoding: input, as: UTF8.self)]],
+            "response_format": ["type": "json_schema", "json_schema":
+                ["name": "clip_selection", "strict": true, "schema": schema]],
         ]
-        var request = URLRequest(url: configuration.baseURL.appending(path: "responses"))
+        var request = URLRequest(url: configuration.baseURL.appending(path: "chat/completions"))
         request.httpMethod = "POST"
         request.timeoutInterval = 180
         request.cachePolicy = .reloadIgnoringLocalCacheData
@@ -110,25 +120,29 @@ struct RequestySelector: Sendable {
         let response: Response
         do { response = try JSONDecoder().decode(Response.self, from: data) }
         catch { throw RequestySelectionError.invalidSelection }
-        guard response.status == "completed" else { throw RequestySelectionError.incomplete }
-        let content = response.output.filter { $0.type == "message" }.flatMap { $0.content ?? [] }
-        guard !content.contains(where: { $0.type == "refusal" }) else { throw RequestySelectionError.refused }
-        let text = content.filter { $0.type == "output_text" }.compactMap(\.text).joined()
-        guard !text.isEmpty else { throw RequestySelectionError.invalidSelection }
+        guard response.choices.count == 1, let choice = response.choices.first else {
+            throw RequestySelectionError.invalidSelection
+        }
+        guard choice.message.refusal == nil else { throw RequestySelectionError.refused }
+        guard choice.finishReason == "stop" else { throw RequestySelectionError.incomplete }
+        guard let text = choice.message.content, !text.isEmpty else { throw RequestySelectionError.invalidSelection }
         return try RequestySelection.validate(Data(text.utf8), in: sentences,
                                              count: options.count, maximumDuration: options.maximumDuration)
     }
 
     private struct Response: Decodable {
-        let status: String
-        let output: [Item]
-        struct Item: Decodable {
-            let type: String
-            let content: [Content]?
+        let choices: [Choice]
+        struct Choice: Decodable {
+            let finishReason: String
+            let message: Message
+            enum CodingKeys: String, CodingKey {
+                case finishReason = "finish_reason"
+                case message
+            }
         }
-        struct Content: Decodable {
-            let type: String
-            let text: String?
+        struct Message: Decodable {
+            let content: String?
+            let refusal: String?
         }
     }
 
