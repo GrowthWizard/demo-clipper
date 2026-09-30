@@ -24,6 +24,9 @@ final class ClipperModel {
     }
 
     private(set) var phase = Phase.idle
+    var selectionOptions = SelectionOptions()
+    var selectionProblem: Problem?
+    private(set) var activeProvider = SelectionOptions.Provider.local
     private(set) var picks: [Pick] = []
     private(set) var sentences: [Sentence] = []
 
@@ -105,6 +108,39 @@ final class ClipperModel {
         }
     }
 
+    var canSelectAgain: Bool {
+        guard !sentences.isEmpty else { return false }
+        return switch phase {
+        case .ready, .failed: true
+        default: false
+        }
+    }
+
+    var canCancelSelection: Bool {
+        switch phase {
+        case .preparingModels, .selecting, .writingTitles: true
+        default: false
+        }
+    }
+
+    /// Reuses the local transcript and keeps the old clips if the search fails.
+    func selectAgain() {
+        guard canSelectAgain else { return }
+        work?.cancel()
+        run += 1
+        let run = run
+        let options = selectionOptions
+        selectionProblem = nil
+        work = Task { await select(using: options, run: run) }
+    }
+
+    func cancelSelection() {
+        guard canCancelSelection else { return }
+        work?.cancel()
+        run += 1
+        phase = picks.isEmpty ? .failed("Selection cancelled. You can select again using the existing transcript.") : .ready
+    }
+
     /// Choosing a file is a presentation in SwiftUI, not a call.
     var isChoosingVideo = false
     private(set) var finished: [ClipFile] = []
@@ -153,11 +189,16 @@ final class ClipperModel {
         selectionSeconds = nil
         cardSeconds = []
         titleProblem = nil
+        selectionProblem = nil
     }
 
     /// Cuts the clips, then asks where to save them.
     func export(_ picks: [Pick]) {
         guard let asset, !picks.isEmpty else { return }
+        guard picks.allSatisfy({ $0.fitsDurationLimit(in: sentences) }) else {
+            exportProblem = Problem(RequestySelectionError.durationLimit)
+            return
+        }
         finishExporting()
         work?.cancel()
         run += 1
@@ -237,9 +278,10 @@ final class ClipperModel {
         work?.cancel()
         run += 1
         let run = run
+        let options = selectionOptions
         Recents.remember(url)
         recents = Recents.urls
-        work = Task { await load(url, run: run) }
+        work = Task { await load(url, options: options, run: run) }
     }
 
     func forgetRecents() {
@@ -255,7 +297,13 @@ final class ClipperModel {
         else { return }
 
         if selected {
-            picks[index].selectedSentenceIDs.insert(sentenceID)
+            var edited = picks[index]
+            edited.selectedSentenceIDs.insert(sentenceID)
+            guard edited.fitsDurationLimit(in: sentences) else {
+                selectionProblem = Problem(RequestySelectionError.durationLimit)
+                return
+            }
+            picks[index] = edited
         } else if picks[index].selectedSentenceIDs.count > 1 {
             picks[index].selectedSentenceIDs.remove(sentenceID)
         }
@@ -266,7 +314,7 @@ final class ClipperModel {
 }
 
 extension ClipperModel {
-    private func load(_ url: URL, run: Int) async {
+    private func load(_ url: URL, options: SelectionOptions, run: Int) async {
         let asset = AVURLAsset(url: url)
         self.asset = asset
         videoName = url.lastPathComponent
@@ -278,6 +326,8 @@ extension ClipperModel {
         selectionSeconds = nil
         cardSeconds = []
         titleProblem = nil
+        selectionProblem = nil
+        activeProvider = options.provider
 
         do {
             source = try await SourceInfo.load(from: asset)
@@ -295,21 +345,7 @@ extension ClipperModel {
             reading = read
             Logger.run.info("transcribed \(read.sentences.count, privacy: .public) sentences")
 
-            let finder = Models.clipFinder
-            phase = .preparingModels
-            try await finder.prepare()
-            guard current(run) else { return }
-
-            phase = .selecting
-            for try await update in finder.search(in: sentences) {
-                guard current(run) else { return }
-                apply(update)
-            }
-
-            guard current(run) else { return }
-            if selection == nil { selection = picks.first?.id }
-            Logger.run.info("\(self.picks.count, privacy: .public) clips ready")
-            phase = picks.isEmpty ? .failed("No clips came back for that video.") : .ready
+            await select(using: options, run: run)
         } catch {
             guard current(run) else { return }
             if error is CancellationError {
@@ -325,12 +361,50 @@ extension ClipperModel {
         }
     }
 
+    private func select(using options: SelectionOptions, run: Int) async {
+        let finder = Models.clipFinder
+        activeProvider = options.provider
+        do {
+            let selector: ClipSelection
+            if options.provider == .requesty {
+                let override = options.model.trimmingCharacters(in: .whitespacesAndNewlines)
+                selector = .requesty(try RequestyConfiguration(model: override.isEmpty ? nil : override), options)
+            } else {
+                phase = .preparingModels
+                try await finder.prepare()
+                selector = .local(count: nil)
+            }
+            try Task.checkCancellation()
+            guard current(run) else { return }
+            phase = .selecting
+            for try await update in finder.search(in: sentences, selection: selector) {
+                guard current(run) else { return }
+                apply(update, provider: options.provider)
+            }
+            guard current(run) else { return }
+            phase = picks.isEmpty ? .failed("No clips came back for that video.") : .ready
+        } catch {
+            guard current(run) else { return }
+            if error is CancellationError {
+                phase = picks.isEmpty ? .failed("Selection cancelled. You can select again.") : .ready
+            } else if picks.isEmpty {
+                phase = .failed(reason(error))
+            } else {
+                phase = .ready
+                selectionProblem = Problem(error)
+            }
+        }
+    }
+
     /// Selection lands in one go; the cards come back one at a time.
-    private func apply(_ update: ClipSearch) {
+    private func apply(_ update: ClipSearch, provider: SelectionOptions.Provider) {
         switch update {
         case .selected(let clips, let seconds):
-            picks = clips.map { Pick($0) }
+            picks = clips.map { Pick($0, provider: provider) }
+            selection = picks.first?.id
             selectionSeconds = seconds
+            cardSeconds = []
+            titleProblem = nil
             if selection == nil { selection = picks.first?.id }
             phase = picks.isEmpty ? .ready : .writingTitles(done: 0, total: picks.count)
 
@@ -389,7 +463,8 @@ extension ClipperModel {
                 let scratch = folder.appending(path: name)
                 Logger.export.info("clip \(index + 1, privacy: .public) of \(picks.count, privacy: .public)")
                 try await Cutting.write(
-                    source, ranges: pick.ranges(in: sentences), to: scratch
+                    source, ranges: pick.ranges(in: sentences), to: scratch,
+                    maximumDuration: pick.provider == .requesty ? 60 : nil
                 )
                 written.append(ClipFile(url: scratch, name: name))
             }

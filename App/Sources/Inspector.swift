@@ -87,8 +87,12 @@ private struct ClipRows: View {
         // The scorer is trained to rank within one video, so the percentile is
         // the number that means anything and the raw score only means something
         // beside the other clips from this same transcript.
-        LabeledContent("Percentile", value: String(format: "%.2f", pick.clip.percentile))
-        LabeledContent("Score", value: String(format: "%.3f", pick.clip.score))
+        if pick.provider == .local {
+            LabeledContent("Percentile", value: String(format: "%.2f", pick.clip.percentile))
+            LabeledContent("Score", value: String(format: "%.3f", pick.clip.score))
+        } else {
+            LabeledContent("Selector", value: "OpenAI via Requesty")
+        }
     }
 
     /// The card's line, or why there is no card to show one from.

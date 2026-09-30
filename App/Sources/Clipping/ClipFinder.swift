@@ -39,8 +39,12 @@ enum ClipSearch: Sendable {
     case writingFailed(reason: String)
 }
 
-/// Picks the clips worth posting out of a transcript, and names them, both on
-/// device.
+enum ClipSelection: Sendable {
+    case local(count: Int?)
+    case requesty(RequestyConfiguration, SelectionOptions)
+}
+
+/// Picks clips locally or through Requesty, then names them on device.
 ///
 /// Driven a stage at a time so clips reach the screen before their cards exist.
 actor ClipFinder {
@@ -149,12 +153,19 @@ actor ClipFinder {
         in sentences: [Sentence],
         count: Int? = nil
     ) -> AsyncThrowingStream<ClipSearch, any Error> {
+        search(in: sentences, selection: .local(count: count))
+    }
+
+    nonisolated func search(
+        in sentences: [Sentence],
+        selection: ClipSelection
+    ) -> AsyncThrowingStream<ClipSearch, any Error> {
         AsyncThrowingStream<ClipSearch, any Error> { continuation in
             let search = Task {
                 do {
                     try await run(
                         in: sentences,
-                        count: count,
+                        selection: selection,
                         report: { continuation.yield($0) }
                     )
                     continuation.finish()
@@ -171,19 +182,25 @@ actor ClipFinder {
 
     private func run(
         in sentences: [Sentence],
-        count: Int?,
+        selection: ClipSelection,
         report: @escaping @Sendable (ClipSearch) -> Void
     ) async throws {
-        guard sentences.count >= Self.minimumSentences else {
-            throw ClipSearchError.tooShort(sentences: sentences.count)
-        }
-
         let started = Date()
         let clips: [Clip]
-        do {
-            clips = try await self.clips.clips(in: sentences.map(\.text), limit: count)
-        } catch {
-            throw ClipSearchError.searchFailed(Self.explain(error, at: locations.clips))
+        switch selection {
+        case .local(let count):
+            guard sentences.count >= Self.minimumSentences else {
+                throw ClipSearchError.tooShort(sentences: sentences.count)
+            }
+            do {
+                clips = try await self.clips.clips(in: sentences.map(\.text), limit: count)
+            } catch {
+                if Task.isCancelled { throw CancellationError() }
+                throw ClipSearchError.searchFailed(Self.explain(error, at: locations.clips))
+            }
+        case .requesty(let configuration, let options):
+            clips = try await RequestySelector(configuration: configuration)
+                .select(in: sentences, options: options)
         }
         try Task.checkCancellation()
         report(.selected(clips, seconds: -started.timeIntervalSinceNow))

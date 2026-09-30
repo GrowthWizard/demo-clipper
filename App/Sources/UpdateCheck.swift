@@ -24,7 +24,7 @@ final class UpdateCheck {
 
     /// Public, so the check carries no token.
     private static let endpoint = URL(
-        string: "https://api.github.com/repos/Desert-Ant-Labs/demo-clipper/releases/latest")!
+        string: "https://api.github.com/repos/GrowthWizard/demo-clipper/releases/latest")!
 
     private struct Release: Decodable {
         let tagName: String

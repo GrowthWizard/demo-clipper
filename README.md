@@ -1,12 +1,95 @@
-# Clipper
+# Clipper Requesty
 
-Generate short clips from a video podcast, meeting recording, or longer
+A fork of [Desert Ant Labs' Clipper](https://github.com/Desert-Ant-Labs/demo-clipper)
+with optional **OpenAI clip selection through Requesty**. Voz still transcribes
+locally; the existing Title model, sentence editing, preview, subtitles and
+AVFoundation export stay local. The original Clips selector remains available.
+
+Choose **Clip Selection** in the toolbar. Requesty mode offers clip count,
+maximum duration (10–60 seconds), focus, editorial instructions and a temporary
+OpenAI model override. **Select Again** reuses the existing transcript and
+replaces clips only after a successful selection. A failed request keeps the
+previous clips. Selection can be cancelled.
+
+OpenAI returns ranked, contiguous sentence-ID ranges, never generated timecodes.
+The app rejects missing/reversed IDs, overlaps, malformed responses and clips
+whose actual SDK cut duration, including padding, exceeds the requested maximum
+or 60 seconds. Manual additions and export keep Requesty clips within 60 seconds.
+The inspector shows their rank without inventing a local Clips confidence score.
+The selection is editorial advice: check the transcript and preview before posting.
+
+Only the transcript and editorial preferences leave the Mac in Requesty mode.
+The client uses the Responses API with a strict JSON schema, `store: false`,
+an ephemeral session, no redirects and sanitized errors. Requesty/provider
+logging and retention depend on the account settings; `store: false` alone does
+not disable gateway logging. The EU router controls Requesty processing;
+provider inference residency depends on the selected model.
+See [Requesty data privacy](https://docs.requesty.ai/features/data-privacy) and
+[EU routing](https://docs.requesty.ai/features/eu-routing).
+
+## Build this fork
+
+Apple Silicon, macOS 26+, Xcode with its Metal Toolchain, and xcodegen are required.
+Install xcodegen with `brew install xcodegen`; if Xcode reports a missing Metal
+Toolchain, use `xcodebuild -downloadComponent MetalToolchain`.
+
+```bash
+git clone https://github.com/GrowthWizard/demo-clipper.git
+cd demo-clipper
+./script/build_and_run.sh run-local  # original on-device selection
+./script/build_and_run.sh test
+```
+
+The app is named **Clipper Requesty** with its own bundle ID, so it can coexist
+with the original app. Its update checker follows this fork's releases. The
+Desert Ant core is pinned to 3.3.1, matching the upstream 1.0.5 release used here.
+The build scripts avoid an observed Xcode 26.6 command-line probe stall by
+omitting verbose diagnostics from the Clang macro probe. Compilation flags and
+macro output are unchanged.
+
+### Requesty through 1Password
+
+Use the `1password-project-env` skill and the official local 1Password MCP.
+Create or reuse a dedicated Clipper/local environment, save these variables,
+and copy the metadata template `.1password/project.example.json` to
+`.1password/project.json` with your account/environment IDs. The real binding
+is gitignored and contains metadata only.
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `REQUESTY_API_KEY` | Yes | Concealed Requesty key with access to the chosen model |
+| `REQUESTY_BASE_URL` | Yes | `https://router.eu.requesty.ai/v1` or another supported Requesty router |
+| `REQUESTY_MODEL` | Yes | OpenAI model ID, e.g. `openai/gpt-5`, with Structured Outputs support |
+
+Mount the environment as the skill's FIFO outside the checkout. Do not create
+plain-text `.env` copies or store the key in the app's preferences. Then run:
+
+```bash
+./script/build_and_run.sh run
+```
+
+This launcher injects the values with the skill runner and passes them in memory to LaunchServices to open the native app bundle. Opening the app through Finder does not inherit
+those process values and leaves Requesty unavailable. Restart the app after
+changing 1Password values. The Codex Run action uses the same launcher.
+1Password currently allows ten local mounts per device; free a specifically
+chosen unused mount if that limit is reached.
+
+For the CLI, build with `./script/build_and_run.sh cli` and launch through the
+same skill runner. Add `--requesty --count 5 --max-duration 60 --focus context`
+(or `hook` / `balanced`), optionally `--model openai/...` and `--instructions`.
+The CLI defaults to the original local selector; no automatic remote/local fallback
+runs after a Requesty error.
+
+## Original Clipper documentation
+
+
+The original app generates short clips from a video podcast, meeting recording, or longer
 recording, fully on device. A local macOS app and a command-line tool over the
 same core.
 
 ![The Clipper app: the clip list, the preview, the transcript and the timeline](docs/clipper.png)
 
-## Download
+## Download the original app
 
 Homebrew is the one to use, because `brew upgrade` moves you to the next
 release:

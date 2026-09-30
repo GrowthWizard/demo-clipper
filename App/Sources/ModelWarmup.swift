@@ -72,6 +72,10 @@ final class ModelWarmup {
         }
     }
 
+    func pending(for provider: SelectionOptions.Provider) -> [Model] {
+        pending.filter { provider == .local || $0 != .clips }
+    }
+
     /// Starts a failed model over. A fetch this size fails on a dropped
     /// connection, and the answer to that is the same work again.
     func retry(_ model: Model) {

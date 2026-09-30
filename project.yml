@@ -18,10 +18,10 @@ packages:
     path: Packages/MLXTrait
   DesertAntCore:
     url: https://github.com/Desert-Ant-Labs/desert-ant-core.git
-    # The same package, same floor, is declared in Packages/MLXTrait/Package.swift
+    # The same package and exact version are declared in Packages/MLXTrait/Package.swift
     # (which adds the MLX trait). Bump both together; `mise run generate`
     # refuses to run while they disagree.
-    from: 3.3.1
+    exactVersion: 3.3.1
   DesertAntSwift:
     url: https://github.com/Desert-Ant-Labs/desert-ant-swift.git
     from: 2.1.2
@@ -54,10 +54,10 @@ targets:
     info:
       path: App/Info.plist
       properties:
-        CFBundleDisplayName: Clipper
+        CFBundleDisplayName: Clipper Requesty
         NSHumanReadableCopyright: © 2026 Desert Ant Labs B.V. Clipper is MIT licensed. The models are under the Desert Ant Labs Source-Available License.
-        CFBundleShortVersionString: "1.0.5"
-        CFBundleVersion: "6"
+        CFBundleShortVersionString: "1.1.0"
+        CFBundleVersion: "7"
         LSMinimumSystemVersion: "26.0"
         LSApplicationCategoryType: public.app-category.utilities
         NSNetworkVolumesUsageDescription: Clipper reads recordings, and any clip model you point it at, from wherever you keep them.
@@ -72,8 +72,8 @@ targets:
     settings:
       base:
         MACOSX_DEPLOYMENT_TARGET: "26.0"
-        PRODUCT_BUNDLE_IDENTIFIER: com.desertant.clipper
-        PRODUCT_NAME: Clipper
+        PRODUCT_BUNDLE_IDENTIFIER: de.65creative.clipper.requesty
+        PRODUCT_NAME: Clipper Requesty
         SWIFT_VERSION: "6.0"
         CODE_SIGN_STYLE: Automatic
         ENABLE_PREVIEWS: "YES"

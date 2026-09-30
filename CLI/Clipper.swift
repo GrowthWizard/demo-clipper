@@ -8,7 +8,7 @@ import Transcript
 struct Clipper: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "clipper",
-        abstract: "Find the clips worth posting in a video, on device."
+        abstract: "Find short clips locally or select them with OpenAI via Requesty."
     )
 
     @Argument(help: "The video to clip. Omit it with --from-transcript.", completion: .file())
@@ -19,6 +19,32 @@ struct Clipper: AsyncParsableCommand {
 
     @Option(name: [.short, .customLong("count")], help: "How many clips to keep.")
     var count: Int?
+
+    @Flag(name: .long, help: "Select with OpenAI through Requesty; send only the transcript.")
+    var requesty = false
+
+    @Option(name: .long, help: "Maximum Requesty clip duration, 10–60 seconds including cut padding.")
+    var maxDuration = 60.0
+
+    @Option(name: .long, help: "Requesty focus: balanced, context or hook.")
+    var focus = "balanced"
+
+    @Option(name: .long, help: "OpenAI model ID for this run; defaults to REQUESTY_MODEL from 1Password.")
+    var model: String?
+
+    @Option(name: .long, help: "Additional editorial preferences for Requesty selection.")
+    var instructions = ""
+
+    private var selectionOptions: SelectionOptions {
+        var options = SelectionOptions()
+        options.provider = requesty ? .requesty : .local
+        options.count = count ?? 5
+        options.maximumDuration = maxDuration
+        options.focus = focus == "context" ? .context : focus == "hook" ? .hook : .balanced
+        options.instructions = instructions
+        options.model = model ?? ""
+        return options
+    }
 
     @Flag(name: .long, help: "Find clips and print them without exporting.")
     var dryRun = false
@@ -66,6 +92,12 @@ struct Clipper: AsyncParsableCommand {
     func validate() throws {
         guard video != nil || fromTranscript != nil else {
             throw ValidationError("Pass a video, or a JSON transcript with --from-transcript.")
+        }
+        if requesty {
+            guard ["balanced", "context", "hook"].contains(focus) else {
+                throw ValidationError("Focus must be balanced, context or hook.")
+            }
+            try selectionOptions.validate()
         }
     }
 
@@ -124,14 +156,21 @@ extension Clipper {
     /// Runs both models over a transcript, reporting each stage as it lands.
     private func findClips(in sentences: [Sentence]) async throws -> [Pick] {
         let finder = ClipFinder(models: models, namesClips: !noTitles)
-        Progress.log("Loading Clips" + (finder.writesTitles ? " and the card model" : ""))
+        let selector: ClipSelection
+        if requesty {
+            selector = .requesty(try RequestyConfiguration(model: model), selectionOptions)
+            Progress.log("Selecting with OpenAI via Requesty; titles stay local")
+        } else {
+            selector = .local(count: count)
+            Progress.log("Loading Clips" + (finder.writesTitles ? " and the card model" : ""))
+        }
 
         var picks: [Pick] = []
         var written = 0
-        for try await update in finder.search(in: sentences, count: count) {
+        for try await update in finder.search(in: sentences, selection: selector) {
             switch update {
             case .selected(let clips, let seconds):
-                picks = clips.map { Pick($0) }
+                picks = clips.map { Pick($0, provider: requesty ? .requesty : .local) }
                 Progress.finish("\(picks.count) clips in \(Format.seconds(seconds))")
             case .written(let id, let card, let seconds):
                 guard let index = picks.firstIndex(where: { $0.id == id }) else { continue }
@@ -190,7 +229,8 @@ extension Clipper {
                 .appending(path: pick.fileName(number: index + 1, of: picks.count))
                 .appendingPathExtension(type)
             let file = try await Cutting.write(
-                source, ranges: pick.ranges(in: sentences), to: destination
+                source, ranges: pick.ranges(in: sentences), to: destination,
+                maximumDuration: pick.provider == .requesty ? 60 : nil
             )
             Progress.log("Exported \(file.lastPathComponent)")
             written[pick.id] = file
@@ -221,10 +261,13 @@ extension Clipper {
             print("")
             print("\(index + 1). \(pick.displayTitle)  [\(pick.duration(in: sentences).formattedDuration)]")
             if let card = pick.card { print("   \(card.description)") }
-            print(String(
-                format: "   sentences: %@, score %.3f, percentile %.2f",
-                pick.keptSentenceIDs.map(String.init).joined(separator: ","),
-                pick.clip.score, pick.clip.percentile))
+            let ids = pick.keptSentenceIDs.map(String.init).joined(separator: ",")
+            if pick.provider == .requesty {
+                print("   sentences: \(ids), selected with OpenAI via Requesty")
+            } else {
+                print(String(format: "   sentences: %@, score %.3f, percentile %.2f",
+                             ids, pick.clip.score, pick.clip.percentile))
+            }
             if let file = files[pick.id] { print("   \(file.path(percentEncoded: false))") }
         }
     }
@@ -265,8 +308,8 @@ private struct Report: Encodable {
         let rank: Int
         let title: String?
         let summary: String?
-        let score: Double
-        let percentile: Double
+        let score: Double?
+        let percentile: Double?
         let seconds: Double
         let sentences: [Int]
         let ranges: [Range]
@@ -342,8 +385,8 @@ extension Pick {
             rank: clip.id,
             title: card?.title,
             summary: card?.description,
-            score: clip.score,
-            percentile: clip.percentile,
+            score: provider == .local ? clip.score : nil,
+            percentile: provider == .local ? clip.percentile : nil,
             seconds: duration(in: sentences),
             sentences: keptSentenceIDs,
             ranges: ranges(in: sentences).map { Report.Range(start: $0.start, end: $0.end) },

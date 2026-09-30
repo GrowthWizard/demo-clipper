@@ -1,0 +1,20 @@
+version = 1
+name = "Clipper Requesty"
+
+[setup]
+script = ""
+
+[[actions]]
+name = "Run"
+icon = "run"
+command = "./script/build_and_run.sh run"
+
+[[actions]]
+name = "Run locally"
+icon = "run"
+command = "./script/build_and_run.sh run-local"
+
+[[actions]]
+name = "Test"
+icon = "test"
+command = "./script/build_and_run.sh test"
