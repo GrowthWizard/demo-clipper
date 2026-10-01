@@ -34,9 +34,6 @@ struct SelectionOptionsView: View {
                              ? "The key, model and router are saved in this app's encrypted login Keychain item on this Mac."
                              : "The key stays in memory until you quit the app. No 1Password mount is needed.")
                             .font(.callout).foregroundStyle(.secondary)
-                        if let problem = model.requestyAccessProblem {
-                            Text(problem).font(.callout).foregroundStyle(.red)
-                        }
                         if configuration == nil {
                             Text("Enter your Requesty key and an allowed GLM 5.3 Flash ID. The default glm-5.3-flash@eu uses EU providers.")
                                 .font(.callout).foregroundStyle(.secondary)
@@ -71,6 +68,11 @@ struct SelectionOptionsView: View {
                             .lineLimit(3...6)
                     }
                 }
+                if let problem = model.requestyAccessProblem {
+                    Section {
+                        Text(problem).font(.callout).foregroundStyle(.red)
+                    }
+                }
                 if !model.sentences.isEmpty {
                     Section {
                         Text("Selecting again reuses this video's transcript. A successful search replaces the clips and any sentence edits; if it fails, your current clips remain.")
@@ -83,12 +85,12 @@ struct SelectionOptionsView: View {
             HStack {
                 Spacer()
                 Button("Done") {
-                    if model.selectionOptions.provider == .local || model.saveRequestyAccess() { dismiss() }
+                    if model.saveRequestyAccess() { dismiss() }
                 }
                     .keyboardShortcut(.cancelAction)
                 if !model.sentences.isEmpty {
                     Button("Select Again") {
-                        guard model.selectionOptions.provider == .local || model.saveRequestyAccess() else { return }
+                        guard model.saveRequestyAccess() else { return }
                         model.selectAgain()
                         dismiss()
                     }
