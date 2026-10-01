@@ -1,12 +1,141 @@
-# Clipper
+# Clipper Requesty
 
-Generate short clips from a video podcast, meeting recording, or longer
+A fork of [Desert Ant Labs' Clipper](https://github.com/Desert-Ant-Labs/demo-clipper)
+with optional **GLM 5.3 Flash clip selection through Requesty**. Voz still transcribes
+locally. Requesty mode finds and editorially reviews candidates and drafts their
+titles and descriptions with GLM. The original Clips selector and Title model
+remain available in local mode. Sentence editing, preview, subtitles and
+AVFoundation export stay local.
+
+Choose **Clip Selection** in the toolbar. Requesty mode offers clip count,
+maximum duration (10–60 seconds), focus, a LinkedIn/general destination, audience,
+content goal, additional editorial instructions and a
+GLM 5.3 Flash model choice. The same window has a masked **Requesty API key** field
+and a router field. **Select Again** reuses the existing transcript and
+replaces clips only after a successful selection. Failed requests and empty
+local selections keep the previous clips and sentence edits. Selection can be cancelled.
+
+GLM 5.3 Flash runs two bounded requests: candidate discovery over the transcript,
+then a separate editorial review of the proposed ranges. The reviewer can tighten
+an excerpt or add up to two adjacent sentences for context. Each candidate is
+checked for a clear opening, complete thought, one main topic, specific value and
+faithful metadata. Failed checks, invented evidence, overlapping or overlong
+reviewed ranges and extra accepted clips are excluded locally. Nothing falls back to unreviewed
+candidates. If none pass, the existing selection is preserved.
+
+The LinkedIn profile prioritizes concrete problems, reasoned decisions and useful
+professional insights, and excludes candidates requiring unseen visual context.
+The general profile can retain a demonstration and labels that context requirement.
+Count is an upper limit, not a quota. The inspector shows the takeaway, selection
+reason, context needed, exact source evidence and how many candidates were excluded.
+These are model judgments, not measured performance or an assurance of publication
+quality. Editing a clip marks its assessment as belonging to the original selection.
+Requesty titles use the reviewed excerpt; local Title cannot overwrite them.
+
+GLM returns ranked, contiguous sentence-ID ranges, never generated timecodes.
+The app rejects missing/reversed IDs, overlaps, malformed responses and clips
+whose actual SDK cut duration, including padding, exceeds the requested maximum
+or 60 seconds. Manual additions and export keep Requesty clips within 60 seconds.
+The inspector shows their rank without inventing a local Clips confidence score.
+The selection is editorial advice: check the transcript and preview before posting.
+
+Only the transcript and editorial preferences leave the Mac in Requesty mode.
+The client uses the Chat Completions API with a strict JSON schema, `store: false`,
+an ephemeral session, no redirects and sanitized errors. Requesty/provider
+logging and retention depend on the account settings; `store: false` alone does
+not disable gateway logging. The EU router controls Requesty processing;
+provider inference residency depends on the selected model.
+The request uses `reasoning_effort: "none"` to leave the bounded output budget
+available for the candidates, review and evidence. Incomplete output is rejected rather than cut.
+See [Requesty data privacy](https://docs.requesty.ai/features/data-privacy) and
+[EU routing](https://docs.requesty.ai/features/eu-routing).
+
+## Build this fork
+
+Apple Silicon, macOS 26+, Xcode with its Metal Toolchain, and xcodegen are required.
+Install xcodegen with `brew install xcodegen`; if Xcode reports a missing Metal
+Toolchain, use `xcodebuild -downloadComponent MetalToolchain`.
+
+```bash
+git clone https://github.com/GrowthWizard/demo-clipper.git
+cd demo-clipper
+./script/build_and_run.sh run
+./script/build_and_run.sh test
+```
+
+The app is named **Clipper Requesty** with its own bundle ID, so it can coexist
+with the original app. Its update checker follows this fork's releases. The
+Desert Ant core is pinned to 3.3.1, matching the upstream 1.0.5 release used here.
+The build scripts avoid an observed Xcode 26.6 command-line probe stall by
+omitting verbose diagnostics from the Clang macro probe. Compilation flags and
+macro output are unchanged.
+
+### Requesty in the app
+
+Open **Clip Selection**, choose **GLM 5.3 Flash via Requesty**, and enter your Requesty
+API key. Choose a model available to your key (for example `glm-5.3-flash@eu`). The
+default router is `https://router.eu.requesty.ai/v1`. The default model ID
+`glm-5.3-flash@eu` routes through EU providers. This version accepts only
+GLM 5.3 Flash, including its named provider deployments; the key must permit
+the exact chosen ID. Catalog visibility alone does not prove model access.
+
+Enable **Remember access in macOS Keychain** to save the key, router and model
+in this app's encrypted login Keychain item. This item does not sync to iCloud.
+Without that option, the values stay in memory until you quit. Disabling it
+and clicking **Done** removes this app's saved item. Keys are never saved in
+preferences, project files or logs.
+
+The app works when opened through Finder or the Codex Run action. No 1Password
+mount is required. A failed Keychain save keeps the settings window open with
+an error; you can choose session-only access instead.
+
+### Optional process configuration and CLI
+
+Use the `1password-project-env` skill and the official local 1Password MCP.
+Create or reuse a dedicated Clipper/local environment, save these variables,
+and copy the metadata template `.1password/project.example.json` to
+`.1password/project.json` with your account/environment IDs. The real binding
+is gitignored and contains metadata only.
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `REQUESTY_API_KEY` | Yes | Concealed Requesty key with access to the chosen model |
+| `REQUESTY_BASE_URL` | Yes | `https://router.eu.requesty.ai/v1` or another supported Requesty router |
+| `REQUESTY_MODEL` | Yes | GLM 5.3 Flash model ID, e.g. `glm-5.3-flash@eu`, with Structured Outputs support |
+
+For a managed environment launch, mount the environment as the skill's FIFO
+outside the checkout. Do not create plain-text `.env` copies. Then run:
+
+```bash
+./script/build_and_run.sh run-1password
+```
+
+This optional launcher injects the values with the skill runner and passes them
+in memory to LaunchServices. They seed the app's API fields for that session;
+click **Done** with Keychain storage enabled to remember them. Restart an
+environment-launched app after changing its process values.
+
+For the CLI, build with `./script/build_and_run.sh cli` and launch through the
+same skill runner. Add `--requesty --count 5 --max-duration 60 --focus context`
+(or `hook` / `balanced`), optionally `--destination linkedin|general`, `--audience`,
+`--content-goal`, `--model glm-5.3-flash@eu` and `--instructions`. JSON reports
+include the editorial assessment and source evidence for each Requesty clip.
+The CLI defaults to the original local selector; no automatic remote/local fallback
+runs after a Requesty error.
+
+The CLI reads `REQUESTY_API_KEY`, `REQUESTY_BASE_URL` and `REQUESTY_MODEL` from
+its process environment. The GUI's Keychain item is not read by the CLI.
+
+## Original Clipper documentation
+
+
+The original app generates short clips from a video podcast, meeting recording, or longer
 recording, fully on device. A local macOS app and a command-line tool over the
 same core.
 
 ![The Clipper app: the clip list, the preview, the transcript and the timeline](docs/clipper.png)
 
-## Download
+## Download the original app
 
 Homebrew is the one to use, because `brew upgrade` moves you to the next
 release:

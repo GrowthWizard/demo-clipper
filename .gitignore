@@ -11,3 +11,6 @@ dist/
 mise.local.toml
 AGENTS.md
 Packages/*/Package.resolved
+
+.1password/project.json
+*.log

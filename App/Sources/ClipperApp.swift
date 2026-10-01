@@ -10,14 +10,14 @@ struct ClipperApp: App {
     var body: some Scene {
         // One window: the app works on one video at a time, and a second
         // window is a second copy of everything with nothing more in it.
-        Window("Clipper", id: "clipper") {
+        Window("Clipper Requesty", id: "clipper") {
             main
         }
         .defaultSize(width: 1240, height: 820)
         .windowResizability(.contentMinSize)
         .commands { ClipperCommands(updates: updates) }
 
-        Window("About Clipper", id: About.windowID) {
+        Window("About Clipper Requesty", id: About.windowID) {
             AboutView()
         }
         .windowResizability(.contentSize)
@@ -44,7 +44,7 @@ private struct ClipperCommands: Commands {
 
     var body: some Commands {
         CommandGroup(replacing: .appInfo) {
-            Button("About Clipper") { openWindow(id: About.windowID) }
+            Button("About Clipper Requesty") { openWindow(id: About.windowID) }
 
             Button("Check for Updates…") {
                 Task { await updates.check() }

@@ -5,13 +5,14 @@ import SwiftUI
 // leads to a video sitting in the same queue.
 struct WarmupView: View {
     @Environment(ModelWarmup.self) private var warmup
+    @Environment(ClipperModel.self) private var clipper
 
     var body: some View {
         VStack(spacing: 20) {
             DA.Loader(.fillSpiral)
                 .frame(width: 40)
             StepPanel(width: 320) {
-                ForEach(ModelWarmup.Model.allCases) { model in
+                ForEach(ModelWarmup.Model.allCases.filter { clipper.selectionOptions.provider == .local || $0 != .clips }) { model in
                     StepRow(
                         title: "\(model.rawValue) model",
                         phase: phase(of: model),

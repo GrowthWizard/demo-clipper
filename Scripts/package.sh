@@ -17,7 +17,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-APP_NAME="Clipper"
+APP_NAME="Clipper Requesty"
 SCHEME="Clipper"
 BUILD_DIR="build/package"
 DIST_DIR="dist"
@@ -47,9 +47,10 @@ case "$INPUT" in
     xcodegen generate >/dev/null
 
     echo "==> Building $APP_NAME"
-    ARGS=(-project "$APP_NAME.xcodeproj" -scheme "$SCHEME"
+    ARGS=(-project Clipper.xcodeproj -scheme "$SCHEME"
           -configuration Release -destination 'platform=macOS,arch=arm64'
           -derivedDataPath "$BUILD_DIR/dd" ARCHS=arm64
+          CC="$PWD/script/clang-probe.sh" CXX="$PWD/script/clang-probe.sh"
           -skipPackagePluginValidation -skipMacroValidation)
     if [ -n "$IDENTITY" ]; then
         echo "    signing as: $IDENTITY"

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "accountId": "YOUR_ACCOUNT_ID",
+  "defaultProfile": "local",
+  "environments": {
+    "local": {
+      "id": "YOUR_CLIPPER_ENVIRONMENT_ID",
+      "name": "Clipper / local",
+      "requiredVariables": ["REQUESTY_API_KEY", "REQUESTY_BASE_URL", "REQUESTY_MODEL"]
+    }
+  }
+}

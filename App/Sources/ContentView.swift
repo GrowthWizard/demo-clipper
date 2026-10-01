@@ -7,6 +7,7 @@ struct ContentView: View {
     // models cost all live there.
     @AppStorage("showsInspector") private var showsInspector = true
     @State private var showsPerformance = false
+    @State private var showsSelectionOptions = false
     @State private var columns = NavigationSplitViewVisibility.detailOnly
 
     var body: some View {
@@ -34,11 +35,23 @@ struct ContentView: View {
                 source: model.source,
                 reading: model.reading,
                 performance: model.performance,
-                titleProblem: model.titleProblem
+                titleProblem: model.titleProblem,
+                editorialRejectedCount: model.editorialRejectedCount
             )
             .inspectorColumnWidth(min: 240, ideal: 320, max: 560)
         }
         .exportProblemAlert(model)
+        .alert("Could not select clips", isPresented: Binding(
+            get: { model.selectionProblem != nil },
+            set: { if !$0 { model.selectionProblem = nil } }
+        ), presenting: model.selectionProblem) { _ in
+            Button("OK") { model.selectionProblem = nil }
+        } message: { problem in
+            Text(problem.message)
+        }
+        .sheet(isPresented: $showsSelectionOptions) {
+            SelectionOptionsView(model: model)
+        }
         .sheet(isPresented: $showsPerformance) {
             if let performance = model.performance {
                 PerformanceSheet(performance: performance)
@@ -68,6 +81,20 @@ struct ContentView: View {
             return true
         }
         .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button("Clip Selection", systemImage: "slider.horizontal.3") {
+                    showsSelectionOptions = true
+                }
+                .help("Choose the selector and short clip preferences")
+            }
+            ToolbarItem(placement: .primaryAction) {
+                if model.canCancelSelection {
+                    Button("Cancel Selection", systemImage: "xmark.circle") { model.cancelSelection() }
+                } else if model.canSelectAgain {
+                    Button("Select Again", systemImage: "arrow.clockwise") { model.selectAgain() }
+                        .help("Select clips again using the existing transcript")
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Button("Export Clip…", action: exportSelectedClip)
@@ -124,7 +151,7 @@ struct ContentView: View {
     /// What is selected, which is the recording's own name when that is what
     /// is selected. The file keeps its identity through the proxy icon.
     private var title: String {
-        guard !model.videoName.isEmpty else { return "Clipper" }
+        guard !model.videoName.isEmpty else { return "Clipper Requesty" }
         guard let pick = model.selectedPick, !pick.isWholeRecording else { return model.videoName }
         return pick.displayTitle
     }
@@ -153,7 +180,7 @@ private struct DetailContent: View {
     var body: some View {
         switch model.phase {
         case .idle:
-            if warmup.pending.isEmpty {
+            if warmup.pending(for: model.selectionOptions.provider).isEmpty {
                 DropZone { model.chooseVideo() }
             } else {
                 WarmupView()
@@ -164,6 +191,9 @@ private struct DetailContent: View {
             } description: {
                 Text(message)
             } actions: {
+                if model.canSelectAgain {
+                    Button("Select Again") { model.selectAgain() }
+                }
                 Button("Open Another Video") { model.chooseVideo() }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)

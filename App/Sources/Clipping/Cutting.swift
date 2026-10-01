@@ -12,11 +12,24 @@ enum Cutting {
     /// Writes the spans as an MP4 and returns where it landed, which is `url`
     /// unless something was already there.
     @discardableResult
-    static func write(_ source: URL, ranges: [TimeRange], to url: URL) async throws -> URL {
+    static func write(_ source: URL, ranges: [TimeRange], to url: URL,
+                      maximumDuration: Double? = nil) async throws -> URL {
         // A stalled write and a slow one look alike from outside, so the write
         // is given a deadline and reports itself rather than never returning.
         try await withDeadline(seconds: allowance(for: ranges)) {
-            try await cut(source, ranges: ranges, to: url)
+            let written = try await cut(source, ranges: ranges, to: url)
+            if let maximumDuration {
+                do {
+                    let duration = try await AVURLAsset(url: written).load(.duration).seconds
+                    guard duration.isFinite, duration > 0, duration <= maximumDuration else {
+                        throw RequestySelectionError.durationLimit
+                    }
+                } catch {
+                    try? FileManager.default.removeItem(at: written)
+                    throw error
+                }
+            }
+            return written
         }
     }
 

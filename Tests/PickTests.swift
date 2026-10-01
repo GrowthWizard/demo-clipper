@@ -172,3 +172,21 @@ struct ExportNameTests {
         #expect(!awkward.slug.hasSuffix("-"))
     }
 }
+
+@Suite("Requesty edit duration")
+struct RequestyEditDurationTests {
+    @Test("Manual additions cannot turn a Requesty short into a clip over 60 seconds")
+    func guardsAnEditedShort() {
+        let spoken = [Sentence(id: 0, text: "First thought.", start: 0, end: 30),
+                      Sentence(id: 1, text: "Another thought.", start: 30, end: 61)]
+        let clip = Clip(id: 0, sentenceIDs: [0], text: "First thought.", score: 0,
+                        percentile: 0, estimatedDurationSec: 30)
+        var remote = Pick(clip, provider: .requesty)
+        #expect(remote.fitsDurationLimit(in: spoken))
+        remote.selectedSentenceIDs.insert(1)
+        #expect(!remote.fitsDurationLimit(in: spoken))
+        var local = Pick(clip)
+        local.selectedSentenceIDs.insert(1)
+        #expect(local.fitsDurationLimit(in: spoken))
+    }
+}

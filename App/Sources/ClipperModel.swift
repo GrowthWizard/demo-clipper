@@ -4,6 +4,7 @@ import Foundation
 import Observation
 import OSLog
 import Transcript
+import Title
 
 /// Drives one video through transcription, clip selection, title writing, and
 /// export, and holds what the views draw.
@@ -24,7 +25,15 @@ final class ClipperModel {
     }
 
     private(set) var phase = Phase.idle
+    var selectionOptions = SelectionOptions()
+    var selectionProblem: Problem?
+    var requestyCredentials = RequestyCredentials.from(environment: ProcessInfo.processInfo.environment)
+    var remembersRequestyAccess = false
+    var requestyAccessProblem: String?
+    private var hasStoredRequestyAccess = false
+    private(set) var activeProvider = SelectionOptions.Provider.local
     private(set) var picks: [Pick] = []
+    private(set) var editorialRejectedCount = 0
     private(set) var sentences: [Sentence] = []
 
     /// What produced the transcript in hand.
@@ -77,6 +86,46 @@ final class ClipperModel {
     /// run reports only while its number is still the current one.
     private var run = 0
 
+    init() {
+        // An optional process configuration seeds only this session. A normal
+        // Finder launch uses the API field or this app's own Keychain item.
+        guard requestyCredentials.apiKey.isEmpty else { return }
+        do {
+            if let saved = try RequestyKeychain().load() {
+                requestyCredentials = saved
+                remembersRequestyAccess = true
+                hasStoredRequestyAccess = true
+            }
+        } catch {
+            requestyAccessProblem = RequestyKeychain.Failure.read.errorDescription
+        }
+    }
+
+    var requestyConfiguration: RequestyConfiguration? {
+        try? requestyCredentials.configuration()
+    }
+
+    /// Saves only after an explicit settings action. Session-only access never
+    /// puts the API key in UserDefaults, a file or a launch argument.
+    func saveRequestyAccess() -> Bool {
+        requestyAccessProblem = nil
+        do {
+            if remembersRequestyAccess {
+                _ = try requestyCredentials.configuration()
+                try RequestyKeychain().save(requestyCredentials)
+                hasStoredRequestyAccess = true
+            } else if hasStoredRequestyAccess {
+                try RequestyKeychain().remove()
+                hasStoredRequestyAccess = false
+            }
+            return true
+        } catch {
+            requestyAccessProblem = (error as? RequestyKeychain.Failure)?.errorDescription
+                ?? "Complete the Requesty API key, router and GLM 5.3 Flash model before saving access."
+            return false
+        }
+    }
+
     /// The selection when it is a clip that can be cut. The recording is not:
     /// it is already the file on disk.
     var exportableClip: Pick? {
@@ -103,6 +152,39 @@ final class ClipperModel {
         case .selecting, .writingTitles: false
         default: !picks.isEmpty
         }
+    }
+
+    var canSelectAgain: Bool {
+        guard !sentences.isEmpty else { return false }
+        return switch phase {
+        case .ready, .failed: true
+        default: false
+        }
+    }
+
+    var canCancelSelection: Bool {
+        switch phase {
+        case .preparingModels, .selecting, .writingTitles: true
+        default: false
+        }
+    }
+
+    /// Reuses the local transcript and keeps the old clips if the search fails.
+    func selectAgain() {
+        guard canSelectAgain else { return }
+        work?.cancel()
+        run += 1
+        let run = run
+        let options = selectionOptions
+        selectionProblem = nil
+        work = Task { await select(using: options, run: run) }
+    }
+
+    func cancelSelection() {
+        guard canCancelSelection else { return }
+        work?.cancel()
+        run += 1
+        phase = picks.isEmpty ? .failed("Selection cancelled. You can select again using the existing transcript.") : .ready
     }
 
     /// Choosing a file is a presentation in SwiftUI, not a call.
@@ -152,12 +234,18 @@ final class ClipperModel {
         selection = nil
         selectionSeconds = nil
         cardSeconds = []
+        editorialRejectedCount = 0
         titleProblem = nil
+        selectionProblem = nil
     }
 
     /// Cuts the clips, then asks where to save them.
     func export(_ picks: [Pick]) {
         guard let asset, !picks.isEmpty else { return }
+        guard picks.allSatisfy({ $0.fitsDurationLimit(in: sentences) }) else {
+            exportProblem = Problem(RequestySelectionError.durationLimit)
+            return
+        }
         finishExporting()
         work?.cancel()
         run += 1
@@ -237,9 +325,10 @@ final class ClipperModel {
         work?.cancel()
         run += 1
         let run = run
+        let options = selectionOptions
         Recents.remember(url)
         recents = Recents.urls
-        work = Task { await load(url, run: run) }
+        work = Task { await load(url, options: options, run: run) }
     }
 
     func forgetRecents() {
@@ -255,7 +344,13 @@ final class ClipperModel {
         else { return }
 
         if selected {
-            picks[index].selectedSentenceIDs.insert(sentenceID)
+            var edited = picks[index]
+            edited.selectedSentenceIDs.insert(sentenceID)
+            guard edited.fitsDurationLimit(in: sentences) else {
+                selectionProblem = Problem(RequestySelectionError.durationLimit)
+                return
+            }
+            picks[index] = edited
         } else if picks[index].selectedSentenceIDs.count > 1 {
             picks[index].selectedSentenceIDs.remove(sentenceID)
         }
@@ -266,7 +361,7 @@ final class ClipperModel {
 }
 
 extension ClipperModel {
-    private func load(_ url: URL, run: Int) async {
+    private func load(_ url: URL, options: SelectionOptions, run: Int) async {
         let asset = AVURLAsset(url: url)
         self.asset = asset
         videoName = url.lastPathComponent
@@ -277,7 +372,10 @@ extension ClipperModel {
         selection = nil
         selectionSeconds = nil
         cardSeconds = []
+        editorialRejectedCount = 0
         titleProblem = nil
+        selectionProblem = nil
+        activeProvider = options.provider
 
         do {
             source = try await SourceInfo.load(from: asset)
@@ -295,21 +393,7 @@ extension ClipperModel {
             reading = read
             Logger.run.info("transcribed \(read.sentences.count, privacy: .public) sentences")
 
-            let finder = Models.clipFinder
-            phase = .preparingModels
-            try await finder.prepare()
-            guard current(run) else { return }
-
-            phase = .selecting
-            for try await update in finder.search(in: sentences) {
-                guard current(run) else { return }
-                apply(update)
-            }
-
-            guard current(run) else { return }
-            if selection == nil { selection = picks.first?.id }
-            Logger.run.info("\(self.picks.count, privacy: .public) clips ready")
-            phase = picks.isEmpty ? .failed("No clips came back for that video.") : .ready
+            await select(using: options, run: run)
         } catch {
             guard current(run) else { return }
             if error is CancellationError {
@@ -325,14 +409,64 @@ extension ClipperModel {
         }
     }
 
+    private func select(using options: SelectionOptions, run: Int) async {
+        let finder = Models.clipFinder
+        activeProvider = options.provider
+        do {
+            let selector: ClipSelection
+            if options.provider == .requesty {
+                selector = .requesty(try requestyCredentials.configuration(), options)
+            } else {
+                phase = .preparingModels
+                try await finder.prepare()
+                selector = .local(count: nil)
+            }
+            try Task.checkCancellation()
+            guard current(run) else { return }
+            phase = .selecting
+            for try await update in finder.search(in: sentences, selection: selector) {
+                guard current(run) else { return }
+                apply(update, provider: options.provider)
+            }
+            guard current(run) else { return }
+            phase = picks.isEmpty ? .failed("No clips came back for that video.") : .ready
+        } catch {
+            guard current(run) else { return }
+            if error is CancellationError {
+                phase = picks.isEmpty ? .failed("Selection cancelled. You can select again.") : .ready
+            } else if picks.isEmpty {
+                phase = .failed(reason(error))
+            } else {
+                phase = .ready
+                selectionProblem = Problem(error)
+            }
+        }
+    }
+
     /// Selection lands in one go; the cards come back one at a time.
-    private func apply(_ update: ClipSearch) {
+    private func apply(_ update: ClipSearch, provider: SelectionOptions.Provider) {
         switch update {
         case .selected(let clips, let seconds):
-            picks = clips.map { Pick($0) }
+            picks = clips.map { Pick($0, provider: provider) }
+            selection = picks.first?.id
             selectionSeconds = seconds
+            cardSeconds = []
+            editorialRejectedCount = 0
+            titleProblem = nil
             if selection == nil { selection = picks.first?.id }
             phase = picks.isEmpty ? .ready : .writingTitles(done: 0, total: picks.count)
+
+        case .curated(let result, let seconds):
+            picks = zip(result.clips, result.reviews).map { clip, review in
+                Pick(clip, card: Card(title: review.title, description: review.summary),
+                     provider: .requesty, editorialReview: review)
+            }
+            editorialRejectedCount = result.rejectedCount
+            selection = picks.first?.id
+            selectionSeconds = seconds
+            cardSeconds = []
+            titleProblem = nil
+            phase = .ready
 
         case .written(let id, let card, let seconds):
             guard let index = picks.firstIndex(where: { $0.id == id }) else { return }
@@ -389,7 +523,8 @@ extension ClipperModel {
                 let scratch = folder.appending(path: name)
                 Logger.export.info("clip \(index + 1, privacy: .public) of \(picks.count, privacy: .public)")
                 try await Cutting.write(
-                    source, ranges: pick.ranges(in: sentences), to: scratch
+                    source, ranges: pick.ranges(in: sentences), to: scratch,
+                    maximumDuration: pick.provider == .requesty ? 60 : nil
                 )
                 written.append(ClipFile(url: scratch, name: name))
             }

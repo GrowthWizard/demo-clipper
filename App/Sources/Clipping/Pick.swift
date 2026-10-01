@@ -10,20 +10,26 @@ import Transcript
 struct Pick: Identifiable, Sendable, Equatable {
     /// What the model picked, untouched.
     let clip: Clip
+    let provider: SelectionOptions.Provider
 
     /// `nil` until the writer reaches this clip, and after one that failed.
     var card: Card?
+    var editorialReview: EditorialReview?
 
     /// What the clip currently uses. Starts as the pick and moves either way.
     var selectedSentenceIDs: Set<Int>
 
     var id: Clip.ID { clip.id }
 
-    init(_ clip: Clip, card: Card? = nil) {
+    init(_ clip: Clip, card: Card? = nil, provider: SelectionOptions.Provider = .local, editorialReview: EditorialReview? = nil) {
         self.clip = clip
+        self.provider = provider
         self.card = card
+        self.editorialReview = editorialReview
         self.selectedSentenceIDs = Set(clip.sentenceIDs)
     }
+
+    var reviewIsCurrent: Bool { selectedSentenceIDs == Set(clip.sentenceIDs) }
 
     /// The id of the pick standing for the whole recording. The model numbers
     /// its clips from zero, so a negative id cannot collide with one.
@@ -67,6 +73,12 @@ struct Pick: Identifiable, Sendable, Equatable {
     /// Length of the assembled clip, which is shorter than the span it covers.
     func duration(in sentences: [Sentence]) -> Double {
         edited(in: sentences).duration(in: sentences)
+    }
+
+    func fitsDurationLimit(in sentences: [Sentence]) -> Bool {
+        guard provider == .requesty else { return true }
+        let duration = duration(in: sentences)
+        return duration.isFinite && duration > 0 && duration <= 60
     }
 
     /// The pick's transcript, joined from the sentences it keeps.

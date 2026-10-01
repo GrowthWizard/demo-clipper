@@ -13,14 +13,13 @@ description = 'Generate Clipper.xcodeproj from project.yml'
 # A literal string: the check below is full of backslashes, and a basic
 # multi-line string would read them as TOML escapes.
 run = '''
-# The core's version floor is declared twice, because an Xcode project cannot
+# The core's exact version is declared twice, because an Xcode project cannot
 # declare a package trait and `Packages/MLXTrait` exists to turn on `MLX`.
-# SwiftPM resolves the union of the two ranges and says nothing useful when
-# they stop overlapping, so they are compared here instead.
-PROJECT=$(grep -A5 '^  DesertAntCore:' project.yml | sed -n 's/^ *from: *//p' | head -1)
-TRAIT=$(sed -n 's/.*desert-ant-core\.git", from: "\([^"]*\)".*/\1/p' Packages/MLXTrait/Package.swift)
+# Compare both declarations before resolving packages.
+PROJECT=$(grep -A5 '^  DesertAntCore:' project.yml | sed -n 's/^ *exactVersion: *//p' | head -1)
+TRAIT=$(sed -n 's/.*desert-ant-core\.git", exact: "\([^"]*\)".*/\1/p' Packages/MLXTrait/Package.swift)
 if [ "$PROJECT" != "$TRAIT" ]; then
-    echo "The desert-ant-core floor differs: project.yml says $PROJECT, Packages/MLXTrait says $TRAIT."
+    echo "The desert-ant-core version differs: project.yml says $PROJECT, Packages/MLXTrait says $TRAIT."
     echo "Bump both together, or SwiftPM fails without naming the cause."
     exit 1
 fi
@@ -47,6 +46,7 @@ set -o pipefail
 ARGS=(-project Clipper.xcodeproj -scheme Clipper
       -configuration Release -destination 'platform=macOS,arch=arm64'
       -derivedDataPath build ARCHS=arm64
+      CC="$PWD/script/clang-probe.sh" CXX="$PWD/script/clang-probe.sh"
       -skipPackagePluginValidation -skipMacroValidation)
 
 if [ -n "${CLIPPER_TEAM_ID:-}" ]; then
@@ -56,14 +56,13 @@ else
     echo "🔏 No CLIPPER_TEAM_ID, signing to this machine only"
 fi
 
-xcodebuild "${ARGS[@]}" build | grep -E 'error:|warning:|BUILD' || true
-echo "📦 build/Build/Products/Release/Clipper.app"
+xcodebuild "${ARGS[@]}" build | grep -E 'error:|warning:|BUILD'
+echo "📦 build/Build/Products/Release/Clipper Requesty.app"
 """
 
 [tasks.run]
-description = 'Build and open the app'
-depends = ['build']
-run = 'open build/Build/Products/Release/Clipper.app'
+description = 'Build and open the app; configure Requesty in Clip Selection'
+run = './script/build_and_run.sh run'
 
 [tasks.cli]
 description = 'Build the clipper command line tool'
@@ -73,8 +72,9 @@ set -o pipefail
 xcodebuild -project Clipper.xcodeproj -scheme ClipperCLI \
     -configuration Release -destination 'platform=macOS,arch=arm64' \
     -derivedDataPath build ARCHS=arm64 \
+    CC="$PWD/script/clang-probe.sh" CXX="$PWD/script/clang-probe.sh" \
     -skipPackagePluginValidation -skipMacroValidation \
-    build | grep -E 'error:|warning:|BUILD' || true
+    build | grep -E 'error:|warning:|BUILD'
 echo "📦 build/Build/Products/Release/clipper"
 """
 
@@ -86,8 +86,9 @@ set -o pipefail
 xcodebuild -project Clipper.xcodeproj -scheme ClipperTests \
     -destination 'platform=macOS,arch=arm64' \
     -derivedDataPath build ARCHS=arm64 \
+    CC="$PWD/script/clang-probe.sh" CXX="$PWD/script/clang-probe.sh" \
     -skipPackagePluginValidation -skipMacroValidation \
-    test | grep -E 'error:|Test run|Suite .* (passed|failed)|\\*\\* TEST' || true
+    test | grep -E 'error:|Test run|Suite .* (passed|failed)|\\*\\* TEST'
 """
 
 [tasks.package]

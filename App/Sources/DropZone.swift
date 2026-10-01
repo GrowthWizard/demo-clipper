@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct DropZone: View {
+    @Environment(ClipperModel.self) private var model
     let openVideo: () -> Void
 
     var body: some View {
@@ -36,7 +37,9 @@ struct DropZone: View {
                 Text(LocalizedStringKey(
                     "Powered by [Voz, Clips and Title](\(About.homepage.absoluteString)), "
                         + "on-device models from Desert Ant Labs."))
-                Text("Runs entirely on this Mac. Nothing is uploaded.")
+                Text(model.selectionOptions.provider == .requesty
+                     ? "GLM 5.3 Flash selects and reviews clips via Requesty. Only the transcript and content brief are sent; your video stays on this Mac."
+                     : "Transcription, clip selection and titles run on this Mac.")
             }
             .font(.subheadline)
             .foregroundStyle(.secondary)
