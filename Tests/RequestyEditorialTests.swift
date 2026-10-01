@@ -83,6 +83,38 @@ struct RequestyEditorialTests {
         #expect(result.reviews.first?.context == .visual)
     }
 
+    @Test("An extended overlong review cannot discard a valid alternative", arguments: [10.0, 60.0])
+    func skipsOverlongReview(maximumDuration: Double) throws {
+        var options = SelectionOptions(); options.maximumDuration = maximumDuration
+        let timed = spoken.enumerated().map { index, sentence in
+            let start = index < 3 ? Double(index) * maximumDuration / 2 : maximumDuration * 2 + Double(index - 3) * 4
+            let duration = index < 3 ? maximumDuration / 2 : 4
+            return Sentence(id: sentence.id, text: sentence.text, start: start, end: start + duration)
+        }
+        let drafts = [
+            EditorialCandidate(candidateID: 0, startSentenceID: 0, endSentenceID: 0, premise: "Login"),
+            EditorialCandidate(candidateID: 1, startSentenceID: 3, endSentenceID: 4, premise: "Information"),
+        ]
+        let result = try RequestyEditorial.review(payload([item(end: 2), item(id: 1, start: 3, end: 4)]),
+            in: timed, options: options, candidates: drafts)
+        #expect(result.clips.map(\.sentenceIDs) == [[3, 4]])
+        #expect(result.reviews.map(\.candidateID) == [1])
+        #expect(result.rejectedCount == 1)
+    }
+
+    @Test("If every reviewed clip exceeds the duration cap, report no approved clips")
+    func rejectsAllOverlongReviews() throws {
+        var options = SelectionOptions(); options.maximumDuration = 10
+        do {
+            _ = try RequestyEditorial.review(payload([item(end: 2)]), in: spoken, options: options)
+            Issue.record("An overlong clip was accepted")
+        } catch RequestySelectionError.noClips {
+            // The caller's existing selection is preserved through this failure path.
+        } catch {
+            Issue.record("Expected noClips, got \(error)")
+        }
+    }
+
     @Test("Rejecting every candidate never falls back to unreviewed ranges")
     func rejectsAll() throws {
         #expect(throws: RequestySelectionError.self) {

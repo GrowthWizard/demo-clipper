@@ -45,7 +45,9 @@ struct Inspector: View {
                                 .font(.callout).foregroundStyle(.secondary)
                         }
                         if editorialRejectedCount > 0 {
-                            Text("\(editorialRejectedCount) weaker candidates were excluded from this selection.")
+                            Text(editorialRejectedCount == 1
+                                 ? "1 weaker candidate was excluded from this selection."
+                                 : "\(editorialRejectedCount) weaker candidates were excluded from this selection.")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }

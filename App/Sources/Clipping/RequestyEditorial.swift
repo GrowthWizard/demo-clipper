@@ -64,6 +64,8 @@ enum RequestyEditorial {
 
     static func review(_ data: Data, in sentences: [Sentence], options: SelectionOptions,
                        candidates: [EditorialCandidate]? = nil) throws -> EditorialResult {
+        try options.validate()
+        try RequestySelection.validateTranscript(sentences)
         struct Output: Decodable { let reviews: [EditorialReview] }
         let output: Output
         do { output = try JSONDecoder().decode(Output.self, from: data) }
@@ -110,8 +112,10 @@ enum RequestyEditorial {
                   }) else { continue }
             let ids = Set(review.startSentenceID...review.endSentenceID)
             guard approved.count < options.count, used.isDisjoint(with: ids) else { continue }
-            _ = try RequestySelection.validate(try ranges([(review.startSentenceID, review.endSentenceID)]),
-                in: sentences, count: 1, maximumDuration: options.maximumDuration)
+            // Valid boundaries can still exceed the cap after a reviewer adds
+            // context. Exclude that candidate without losing valid alternatives.
+            guard (try? RequestySelection.validate(try ranges([(review.startSentenceID, review.endSentenceID)]),
+                in: sentences, count: 1, maximumDuration: options.maximumDuration)) != nil else { continue }
             used.formUnion(ids)
             approved.append(review)
         }

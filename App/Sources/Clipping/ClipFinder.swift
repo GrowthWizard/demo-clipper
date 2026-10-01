@@ -9,6 +9,7 @@ enum ClipSearchError: LocalizedError {
     case searchFailed(String)
     case writingFailed(String)
     case tooShort(sentences: Int)
+    case noClips
 
     var errorDescription: String? {
         switch self {
@@ -18,6 +19,8 @@ enum ClipSearchError: LocalizedError {
             "The clip model could not read that transcript. \(reason)"
         case .writingFailed(let reason):
             "The clips have no titles. \(reason)"
+        case .noClips:
+            "The local model found no clips. Any existing clips and edits are kept."
         case .tooShort(let sentences):
             "There is not enough said in that video to clip. It has "
                 + "\(sentences) \(sentences == 1 ? "sentence" : "sentences"), and a clip "
@@ -52,6 +55,8 @@ enum ClipSelection: Sendable {
 actor ClipFinder {
     private let clips: Clips
     private var writer: Titles?
+    /// A deterministic local selector for stream regression tests, without model downloads.
+    private let localSelection: (@Sendable ([String], Int?) async throws -> [Clip])?
 
     /// Where the models were found, for anything that wants to say so.
     nonisolated let locations: ModelLocations
@@ -61,9 +66,11 @@ actor ClipFinder {
     /// the weights, and asking for unnamed clips must not start a download.
     nonisolated let namesClips: Bool
 
-    init(models: ModelLocations = .resolved, namesClips: Bool = true) {
+    init(models: ModelLocations = .resolved, namesClips: Bool = true,
+         localSelection: (@Sendable ([String], Int?) async throws -> [Clip])? = nil) {
         self.locations = models
         self.namesClips = namesClips
+        self.localSelection = localSelection
         self.clips = Clips(directory: models.clips?.path(percentEncoded: false))
     }
 
@@ -195,7 +202,11 @@ actor ClipFinder {
                 throw ClipSearchError.tooShort(sentences: sentences.count)
             }
             do {
-                clips = try await self.clips.clips(in: sentences.map(\.text), limit: count)
+                if let localSelection {
+                    clips = try await localSelection(sentences.map(\.text), count)
+                } else {
+                    clips = try await self.clips.clips(in: sentences.map(\.text), limit: count)
+                }
             } catch {
                 if Task.isCancelled { throw CancellationError() }
                 throw ClipSearchError.searchFailed(Self.explain(error, at: locations.clips))
@@ -208,8 +219,9 @@ actor ClipFinder {
             return
         }
         try Task.checkCancellation()
+        // A repeat search must not replace existing picks with an empty result.
+        guard !clips.isEmpty else { throw ClipSearchError.noClips }
         report(.selected(clips, seconds: -started.timeIntervalSinceNow))
-        guard !clips.isEmpty else { return }
 
         guard namesClips else { return }
         do {

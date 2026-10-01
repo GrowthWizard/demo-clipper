@@ -12,15 +12,15 @@ maximum duration (10–60 seconds), focus, a LinkedIn/general destination, audie
 content goal, additional editorial instructions and a
 GLM 5.3 Flash model choice. The same window has a masked **Requesty API key** field
 and a router field. **Select Again** reuses the existing transcript and
-replaces clips only after a successful selection. A failed request keeps the
-previous clips. Selection can be cancelled.
+replaces clips only after a successful selection. Failed requests and empty
+local selections keep the previous clips and sentence edits. Selection can be cancelled.
 
 GLM 5.3 Flash runs two bounded requests: candidate discovery over the transcript,
 then a separate editorial review of the proposed ranges. The reviewer can tighten
 an excerpt or add up to two adjacent sentences for context. Each candidate is
 checked for a clear opening, complete thought, one main topic, specific value and
-faithful metadata. Failed checks, invented evidence, overlapping accepted ranges
-and extra accepted clips are excluded locally. Nothing falls back to unreviewed
+faithful metadata. Failed checks, invented evidence, overlapping or overlong
+reviewed ranges and extra accepted clips are excluded locally. Nothing falls back to unreviewed
 candidates. If none pass, the existing selection is preserved.
 
 The LinkedIn profile prioritizes concrete problems, reasoned decisions and useful

@@ -33,6 +33,45 @@ struct ShortTranscriptTests {
     }
 }
 
+@Suite("Local repeat selection")
+struct LocalRepeatSelectionTests {
+    @Test("An empty local search cannot replace existing clips or sentence edits")
+    func preservesExistingSelection() async throws {
+        let spoken = sentences(5)
+        let clip = Clip(id: 0, sentenceIDs: [0, 1, 2], text: "Existing clip", score: 0.5,
+                        percentile: 0.5, estimatedDurationSec: 12)
+        var edited = Pick(clip)
+        edited.selectedSentenceIDs.remove(1)
+        var picks = [edited]
+        let finder = ClipFinder(models: ModelLocations(), namesClips: false,
+                                localSelection: { _, _ in [] })
+        var failure: (any Error)?
+        do {
+            for try await update in finder.search(in: spoken) {
+                if case .selected(let clips, _) = update {
+                    picks = clips.map { Pick($0) }
+                }
+            }
+        } catch { failure = error }
+        #expect(failure is ClipSearchError)
+        #expect(picks == [edited])
+    }
+
+    @Test("A nonempty local search still delivers its selection")
+    func deliversValidSelection() async throws {
+        let spoken = sentences(5)
+        let clip = Clip(id: 0, sentenceIDs: [0, 1, 2], text: "New clip", score: 0.5,
+                        percentile: 0.5, estimatedDurationSec: 12)
+        let finder = ClipFinder(models: ModelLocations(), namesClips: false,
+                                localSelection: { _, _ in [clip] })
+        var selected: [Clip] = []
+        for try await update in finder.search(in: spoken) {
+            if case .selected(let clips, _) = update { selected = clips }
+        }
+        #expect(selected == [clip])
+    }
+}
+
 @Suite("Model locations")
 struct ModelLocationTests {
     /// Asserts the behavior, not the names: a restated list goes stale on the
