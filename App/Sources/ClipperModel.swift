@@ -4,6 +4,7 @@ import Foundation
 import Observation
 import OSLog
 import Transcript
+import Title
 
 /// Drives one video through transcription, clip selection, title writing, and
 /// export, and holds what the views draw.
@@ -32,6 +33,7 @@ final class ClipperModel {
     private var hasStoredRequestyAccess = false
     private(set) var activeProvider = SelectionOptions.Provider.local
     private(set) var picks: [Pick] = []
+    private(set) var editorialRejectedCount = 0
     private(set) var sentences: [Sentence] = []
 
     /// What produced the transcript in hand.
@@ -232,6 +234,7 @@ final class ClipperModel {
         selection = nil
         selectionSeconds = nil
         cardSeconds = []
+        editorialRejectedCount = 0
         titleProblem = nil
         selectionProblem = nil
     }
@@ -369,6 +372,7 @@ extension ClipperModel {
         selection = nil
         selectionSeconds = nil
         cardSeconds = []
+        editorialRejectedCount = 0
         titleProblem = nil
         selectionProblem = nil
         activeProvider = options.provider
@@ -447,9 +451,22 @@ extension ClipperModel {
             selection = picks.first?.id
             selectionSeconds = seconds
             cardSeconds = []
+            editorialRejectedCount = 0
             titleProblem = nil
             if selection == nil { selection = picks.first?.id }
             phase = picks.isEmpty ? .ready : .writingTitles(done: 0, total: picks.count)
+
+        case .curated(let result, let seconds):
+            picks = zip(result.clips, result.reviews).map { clip, review in
+                Pick(clip, card: Card(title: review.title, description: review.summary),
+                     provider: .requesty, editorialReview: review)
+            }
+            editorialRejectedCount = result.rejectedCount
+            selection = picks.first?.id
+            selectionSeconds = seconds
+            cardSeconds = []
+            titleProblem = nil
+            phase = .ready
 
         case .written(let id, let card, let seconds):
             guard let index = picks.firstIndex(where: { $0.id == id }) else { return }

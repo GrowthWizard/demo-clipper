@@ -38,7 +38,7 @@ struct DropZone: View {
                     "Powered by [Voz, Clips and Title](\(About.homepage.absoluteString)), "
                         + "on-device models from Desert Ant Labs."))
                 Text(model.selectionOptions.provider == .requesty
-                     ? "GLM 5.3 Flash selects clips via Requesty. Only the transcript is sent; your video stays on this Mac."
+                     ? "GLM 5.3 Flash selects and reviews clips via Requesty. Only the transcript and content brief are sent; your video stays on this Mac."
                      : "Transcription, clip selection and titles run on this Mac.")
             }
             .font(.subheadline)

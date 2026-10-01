@@ -2,17 +2,37 @@
 
 A fork of [Desert Ant Labs' Clipper](https://github.com/Desert-Ant-Labs/demo-clipper)
 with optional **GLM 5.3 Flash clip selection through Requesty**. Voz still transcribes
-locally; the existing Title model, sentence editing, preview, subtitles and
-AVFoundation export stay local. The original Clips selector remains available.
+locally. Requesty mode finds and editorially reviews candidates and drafts their
+titles and descriptions with GLM. The original Clips selector and Title model
+remain available in local mode. Sentence editing, preview, subtitles and
+AVFoundation export stay local.
 
 Choose **Clip Selection** in the toolbar. Requesty mode offers clip count,
-maximum duration (10–60 seconds), focus, editorial instructions and a
+maximum duration (10–60 seconds), focus, a LinkedIn/general destination, audience,
+content goal, additional editorial instructions and a
 GLM 5.3 Flash model choice. The same window has a masked **Requesty API key** field
 and a router field. **Select Again** reuses the existing transcript and
 replaces clips only after a successful selection. A failed request keeps the
 previous clips. Selection can be cancelled.
 
-GLM 5.3 Flash returns ranked, contiguous sentence-ID ranges, never generated timecodes.
+GLM 5.3 Flash runs two bounded requests: candidate discovery over the transcript,
+then a separate editorial review of the proposed ranges. The reviewer can tighten
+an excerpt or add up to two adjacent sentences for context. Each candidate is
+checked for a clear opening, complete thought, one main topic, specific value and
+faithful metadata. Failed checks, invented evidence, overlapping accepted ranges
+and extra accepted clips are excluded locally. Nothing falls back to unreviewed
+candidates. If none pass, the existing selection is preserved.
+
+The LinkedIn profile prioritizes concrete problems, reasoned decisions and useful
+professional insights, and excludes candidates requiring unseen visual context.
+The general profile can retain a demonstration and labels that context requirement.
+Count is an upper limit, not a quota. The inspector shows the takeaway, selection
+reason, context needed, exact source evidence and how many candidates were excluded.
+These are model judgments, not measured performance or an assurance of publication
+quality. Editing a clip marks its assessment as belonging to the original selection.
+Requesty titles use the reviewed excerpt; local Title cannot overwrite them.
+
+GLM returns ranked, contiguous sentence-ID ranges, never generated timecodes.
 The app rejects missing/reversed IDs, overlaps, malformed responses and clips
 whose actual SDK cut duration, including padding, exceeds the requested maximum
 or 60 seconds. Manual additions and export keep Requesty clips within 60 seconds.
@@ -26,7 +46,7 @@ logging and retention depend on the account settings; `store: false` alone does
 not disable gateway logging. The EU router controls Requesty processing;
 provider inference residency depends on the selected model.
 The request uses `reasoning_effort: "none"` to leave the bounded output budget
-available for sentence IDs. Incomplete output is rejected rather than cut.
+available for the candidates, review and evidence. Incomplete output is rejected rather than cut.
 See [Requesty data privacy](https://docs.requesty.ai/features/data-privacy) and
 [EU routing](https://docs.requesty.ai/features/eu-routing).
 
@@ -97,7 +117,9 @@ environment-launched app after changing its process values.
 
 For the CLI, build with `./script/build_and_run.sh cli` and launch through the
 same skill runner. Add `--requesty --count 5 --max-duration 60 --focus context`
-(or `hook` / `balanced`), optionally `--model glm-5.3-flash@eu` and `--instructions`.
+(or `hook` / `balanced`), optionally `--destination linkedin|general`, `--audience`,
+`--content-goal`, `--model glm-5.3-flash@eu` and `--instructions`. JSON reports
+include the editorial assessment and source evidence for each Requesty clip.
 The CLI defaults to the original local selector; no automatic remote/local fallback
 runs after a Requesty error.
 

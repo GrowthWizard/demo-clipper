@@ -21,6 +21,23 @@ struct SelectionOptions: Sendable, Equatable {
         }
     }
 
+    enum Destination: String, CaseIterable, Identifiable, Sendable {
+        case linkedIn = "LinkedIn · useful professional insights"
+        case general = "General · stories and insights"
+        var id: String { rawValue }
+        var instruction: String {
+            switch self {
+            case .linkedIn: "Select useful professional insights for organic LinkedIn posts. Prefer a concrete user problem and a reasoned improvement or practical lesson. Reject generic aspirations, color preferences, UI walkthroughs, praise and internal acquisition/social-posting plans. Minimal post context may identify the case, but cannot supply a missing argument."
+            case .general: "Select original self-contained stories, explanations or insights with a clear setup and payoff. A visible demonstration may be needed, but explicitly label it as requiring visual context."
+            }
+        }
+    }
+
+    var destination = Destination.linkedIn
+    var audience = "Product and marketing decision-makers improving digital user experiences"
+    var contentGoal = "Demonstrate sound judgment through a concrete problem, reasoned decision and transferable takeaway."
+    var candidateLimit: Int { min(12, max(6, count + 3)) }
+
     var provider = Provider.local
     var count = 5
     var maximumDuration = 60.0
@@ -31,7 +48,9 @@ struct SelectionOptions: Sendable, Equatable {
 
     func validate() throws {
         guard (1...10).contains(count), maximumDuration.isFinite,
-              (10...60).contains(maximumDuration), instructions.count <= 4_000 else {
+              (10...60).contains(maximumDuration), instructions.count <= 4_000,
+              !audience.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, audience.count <= 1_000,
+              !contentGoal.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, contentGoal.count <= 1_500 else {
             throw RequestySelectionError.invalidSelection
         }
     }

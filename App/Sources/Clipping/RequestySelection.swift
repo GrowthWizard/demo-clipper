@@ -10,7 +10,7 @@ enum RequestySelectionError: LocalizedError {
         switch self {
         case .invalidTranscript: "The transcript has invalid sentence IDs or timings."
         case .invalidSelection: "Requesty returned invalid, overlapping or overlong clips. Try selecting again or adjust the instructions."
-        case .noClips: "The model found no suitable clips. Try another focus or model."
+        case .noClips: "No candidates passed the editorial review. Adjust the audience, content goal or instructions. Existing clips are kept."
         case .configuration: "Enter a Requesty API key, a supported HTTPS Requesty router and an allowed GLM 5.3 Flash model in Clip Selection."
         case .refused: "The model declined this selection request."
         case .incomplete: "The model did not finish its selection. Try again with fewer clips."
@@ -26,7 +26,7 @@ enum RequestySelection {
     static func validate(_ data: Data, in sentences: [Sentence], count: Int,
                          maximumDuration: Double) throws -> [Clip] {
         try validateTranscript(sentences)
-        guard count > 0, count <= 10, maximumDuration.isFinite,
+        guard count > 0, count <= 20, maximumDuration.isFinite,
               maximumDuration > 0 else { throw RequestySelectionError.invalidSelection }
         let output: Output
         do { output = try JSONDecoder().decode(Output.self, from: data) }

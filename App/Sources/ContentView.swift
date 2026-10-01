@@ -35,7 +35,8 @@ struct ContentView: View {
                 source: model.source,
                 reading: model.reading,
                 performance: model.performance,
-                titleProblem: model.titleProblem
+                titleProblem: model.titleProblem,
+                editorialRejectedCount: model.editorialRejectedCount
             )
             .inspectorColumnWidth(min: 240, ideal: 320, max: 560)
         }

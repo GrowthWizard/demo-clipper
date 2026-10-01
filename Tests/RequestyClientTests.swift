@@ -81,11 +81,19 @@ struct RequestyClientTests {
         #expect(config.model == model)
     }
 
-    @Test("Parses completed GLM chat output into real clips")
+    @Test("Extracts completed GLM chat content for strict editorial decoding")
     func parsesCompletedResponse() throws {
-        let data = Data(#"{"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"{\"clips\":[{\"startSentenceID\":0,\"endSentenceID\":0}]}"}}]}"#.utf8)
-        let clips = try RequestySelector.decode(data, in: spoken, options: SelectionOptions())
-        #expect(clips.first?.sentenceIDs == [0])
+        let data = Data(#"{"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"{\"reviews\":[]}"}}]}"#.utf8)
+        let content = try RequestySelector.content(data)
+        #expect(String(decoding: content, as: UTF8.self) == #"{"reviews":[]}"#)
+    }
+
+    @Test("A range without editorial review cannot become a publishable suggestion")
+    func rejectsUnreviewedRanges() throws {
+        let data = Data(#"{"choices":[{"finish_reason":"stop","message":{"content":"{\"clips\":[{\"startSentenceID\":0,\"endSentenceID\":0}]}"}}]}"#.utf8)
+        #expect(throws: RequestySelectionError.self) {
+            try RequestySelector.decode(data, in: spoken, options: SelectionOptions())
+        }
     }
 
     @Test("Never accepts unfinished output, refusals or echoed server errors", arguments: [

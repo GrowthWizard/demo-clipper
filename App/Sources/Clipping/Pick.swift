@@ -14,18 +14,22 @@ struct Pick: Identifiable, Sendable, Equatable {
 
     /// `nil` until the writer reaches this clip, and after one that failed.
     var card: Card?
+    var editorialReview: EditorialReview?
 
     /// What the clip currently uses. Starts as the pick and moves either way.
     var selectedSentenceIDs: Set<Int>
 
     var id: Clip.ID { clip.id }
 
-    init(_ clip: Clip, card: Card? = nil, provider: SelectionOptions.Provider = .local) {
+    init(_ clip: Clip, card: Card? = nil, provider: SelectionOptions.Provider = .local, editorialReview: EditorialReview? = nil) {
         self.clip = clip
         self.provider = provider
         self.card = card
+        self.editorialReview = editorialReview
         self.selectedSentenceIDs = Set(clip.sentenceIDs)
     }
+
+    var reviewIsCurrent: Bool { selectedSentenceIDs == Set(clip.sentenceIDs) }
 
     /// The id of the pick standing for the whole recording. The model numbers
     /// its clips from zero, so a negative id cannot collide with one.

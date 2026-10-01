@@ -33,6 +33,8 @@ enum ClipSearchError: LocalizedError {
 enum ClipSearch: Sendable {
     /// The clips, unnamed, and how long the selector took over all of them.
     case selected([Clip], seconds: Double)
+    /// Remote selection, editorial review and faithful cards arrive together.
+    case curated(EditorialResult, seconds: Double)
     /// One clip has been named.
     case written(id: Clip.ID, card: Card, seconds: Double)
     /// No cards will arrive. The clips already reported still stand.
@@ -44,7 +46,7 @@ enum ClipSelection: Sendable {
     case requesty(RequestyConfiguration, SelectionOptions)
 }
 
-/// Picks clips locally or through Requesty, then names them on device.
+/// Local selection keeps its on-device writer; Requesty returns reviewed cards.
 ///
 /// Driven a stage at a time so clips reach the screen before their cards exist.
 actor ClipFinder {
@@ -199,8 +201,11 @@ actor ClipFinder {
                 throw ClipSearchError.searchFailed(Self.explain(error, at: locations.clips))
             }
         case .requesty(let configuration, let options):
-            clips = try await RequestySelector(configuration: configuration)
-                .select(in: sentences, options: options)
+            let result = try await RequestySelector(configuration: configuration)
+                .selectReviewed(in: sentences, options: options)
+            try Task.checkCancellation()
+            report(.curated(result, seconds: -started.timeIntervalSinceNow))
+            return
         }
         try Task.checkCancellation()
         report(.selected(clips, seconds: -started.timeIntervalSinceNow))

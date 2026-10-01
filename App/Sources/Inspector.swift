@@ -8,6 +8,7 @@ struct Inspector: View {
     let reading: Reading?
     let performance: ClipperModel.Performance?
     let titleProblem: String?
+    var editorialRejectedCount = 0
 
     @State private var showsClip = true
     @State private var showsFile = false
@@ -22,6 +23,32 @@ struct Inspector: View {
                     ClipRows(pick: pick, sentences: sentences, titleProblem: titleProblem)
                 } header: {
                     header("Clip", $showsClip)
+                }
+                if let review = pick.editorialReview {
+                    Section("Content review") {
+                        if pick.reviewIsCurrent {
+                            LabeledContent("Use", value: review.context == .none ? "Works on its own" : review.context == .post ? "Add post context" : "Needs the visible demonstration")
+                            Text(review.takeaway).font(.callout)
+                            Text(review.reason).font(.callout).foregroundStyle(.secondary)
+                            if !review.contextNote.isEmpty {
+                                Text(review.contextNote).font(.callout).foregroundStyle(.secondary)
+                            }
+                            DisclosureGroup("Original evidence") {
+                                ForEach(Array(review.evidence.enumerated()), id: \.offset) { _, evidence in
+                                    Text("“\(evidence.quote)”").font(.callout).textSelection(.enabled)
+                                }
+                            }
+                            Text("Editorial suggestion based on the transcript. Check the video and subtitles before posting.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        } else {
+                            Text("This clip was edited after review. Its title and content assessment refer to the original selection. Select again to review new suggestions.")
+                                .font(.callout).foregroundStyle(.secondary)
+                        }
+                        if editorialRejectedCount > 0 {
+                            Text("\(editorialRejectedCount) weaker candidates were excluded from this selection.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
                 }
                 if let performance {
                     Section(isExpanded: $showsPerformance) {

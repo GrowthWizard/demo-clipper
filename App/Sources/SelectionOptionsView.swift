@@ -19,7 +19,7 @@ struct SelectionOptionsView: View {
                         Text("Use the original Clips model. Transcription, selection and titles run on this Mac.")
                             .foregroundStyle(.secondary)
                     } else {
-                        Text("Only the transcript and your preferences are sent through Requesty to GLM 5.3 Flash. Voz, titles, video preview and export stay on this Mac.")
+                        Text("GLM finds candidates, reviews their content and drafts titles. Only the transcript and your preferences are sent through Requesty. Transcription, video preview and export stay on this Mac.")
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -41,6 +41,19 @@ struct SelectionOptionsView: View {
                             Text("Enter your Requesty key and an allowed GLM 5.3 Flash ID. The default glm-5.3-flash@eu uses EU providers.")
                                 .font(.callout).foregroundStyle(.secondary)
                         }
+                    }
+                    Section("Content brief") {
+                        Picker("Destination", selection: $model.selectionOptions.destination) {
+                            ForEach(SelectionOptions.Destination.allCases) { destination in
+                                Text(destination.rawValue).tag(destination)
+                            }
+                        }
+                        TextField("Audience", text: $model.selectionOptions.audience, axis: .vertical)
+                            .lineLimit(2...3)
+                        TextField("Content goal", text: $model.selectionOptions.contentGoal, axis: .vertical)
+                            .lineLimit(2...3)
+                        Text("Only candidates that pass the editorial review become clips. Fewer strong clips are preferred over filling the requested count.")
+                            .font(.callout).foregroundStyle(.secondary)
                     }
                     Section("Short clips") {
                         Stepper("Up to \(model.selectionOptions.count) clips", value: $model.selectionOptions.count, in: 1...10)
@@ -95,6 +108,6 @@ struct SelectionOptionsView: View {
     }
 
     private var requestyIsReady: Bool {
-        model.selectionOptions.provider == .local || configuration != nil
+        model.selectionOptions.provider == .local || (configuration != nil && (try? model.selectionOptions.validate()) != nil)
     }
 }

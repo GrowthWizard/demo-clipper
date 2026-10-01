@@ -35,6 +35,15 @@ struct Clipper: AsyncParsableCommand {
     @Option(name: .long, help: "Additional editorial preferences for Requesty selection.")
     var instructions = ""
 
+    @Option(name: .long, help: "Content destination: linkedin or general.")
+    var destination = "linkedin"
+
+    @Option(name: .long, help: "Audience for the editorial review.")
+    var audience = SelectionOptions().audience
+
+    @Option(name: .long, help: "What the audience should gain from the clips.")
+    var contentGoal = SelectionOptions().contentGoal
+
     private var selectionOptions: SelectionOptions {
         var options = SelectionOptions()
         options.provider = requesty ? .requesty : .local
@@ -43,6 +52,9 @@ struct Clipper: AsyncParsableCommand {
         options.focus = focus == "context" ? .context : focus == "hook" ? .hook : .balanced
         options.instructions = instructions
         options.model = model ?? ""
+        options.destination = destination == "general" ? .general : .linkedIn
+        options.audience = audience
+        options.contentGoal = contentGoal
         return options
     }
 
@@ -96,6 +108,9 @@ struct Clipper: AsyncParsableCommand {
         if requesty {
             guard ["balanced", "context", "hook"].contains(focus) else {
                 throw ValidationError("Focus must be balanced, context or hook.")
+            }
+            guard ["linkedin", "general"].contains(destination) else {
+                throw ValidationError("Destination must be linkedin or general.")
             }
             try selectionOptions.validate()
         }
@@ -159,7 +174,7 @@ extension Clipper {
         let selector: ClipSelection
         if requesty {
             selector = .requesty(try RequestyConfiguration(model: model), selectionOptions)
-            Progress.log("Selecting with GLM 5.3 Flash via Requesty; titles stay local")
+            Progress.log("Selecting and reviewing with GLM 5.3 Flash via Requesty")
         } else {
             selector = .local(count: count)
             Progress.log("Loading Clips" + (finder.writesTitles ? " and the card model" : ""))
@@ -172,6 +187,12 @@ extension Clipper {
             case .selected(let clips, let seconds):
                 picks = clips.map { Pick($0, provider: requesty ? .requesty : .local) }
                 Progress.finish("\(picks.count) clips in \(Format.seconds(seconds))")
+            case .curated(let result, let seconds):
+                picks = zip(result.clips, result.reviews).map { clip, review in
+                    Pick(clip, card: noTitles ? nil : Card(title: review.title, description: review.summary),
+                         provider: .requesty, editorialReview: review)
+                }
+                Progress.finish("\(picks.count) reviewed clips in \(Format.seconds(seconds)); \(result.rejectedCount) candidates excluded")
             case .written(let id, let card, let seconds):
                 guard let index = picks.firstIndex(where: { $0.id == id }) else { continue }
                 picks[index].card = card
@@ -308,6 +329,7 @@ private struct Report: Encodable {
         let rank: Int
         let title: String?
         let summary: String?
+        let editorialReview: EditorialReview?
         let score: Double?
         let percentile: Double?
         let seconds: Double
@@ -385,6 +407,7 @@ extension Pick {
             rank: clip.id,
             title: card?.title,
             summary: card?.description,
+            editorialReview: editorialReview,
             score: provider == .local ? clip.score : nil,
             percentile: provider == .local ? clip.percentile : nil,
             seconds: duration(in: sentences),
